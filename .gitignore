@@ -10,16 +10,32 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+data/uploads/*
+!data/uploads/.gitkeep
 *.parquet
 *.tif
 *.tiff
 
 
-# Model weights and artifacts
+# Model weights and binaries
 models/*
 !models/.gitkeep
+*.pt
+*.pth
+*.bin
+*.onnx
+*.weights
+*.h5
+
+# Local database and sqlite files
+*.db
+*.sqlite
+*.sqlite3
+
+# Artifacts and test outputs
 artifacts/*
 !artifacts/.gitkeep
+*.log
 
 # Python cache & virtual environments
 __pycache__/
