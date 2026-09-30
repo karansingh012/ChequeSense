@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Ensure the project root (ChequeSense/) is on sys.path so that
+# `dashboard.components`, `src.*`, etc. are importable when Streamlit
+# launches this file directly (e.g. `streamlit run dashboard/app.py`).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 import streamlit as st
 
 from dashboard.components import BANKING_CSS, backend_client

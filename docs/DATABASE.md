@@ -1,339 +1,276 @@
-# ChequeSense Database Persistence Layer (Phase 7)
+# ChequeSense — Database Architecture
 
-## 1. Architecture & Design Principles
+## Overview
 
-The ChequeSense persistence layer provides a normalized, audit-compliant PostgreSQL database backed by **SQLAlchemy 2.0** ORM and **Alembic** migrations. It supports high-throughput cheque processing pipelines, human teller review workflows, and long-term regulatory compliance.
-
-### Core Architectural Principles:
-1. **Normalized Relational Schema (3NF)**: Eliminates redundancy across users, cheques, processing passes, extracted fields, raw model inferences, and review resolutions.
-2. **Externalized Binary Storage**: Large cheque image binaries are **never stored directly in PostgreSQL**. Only storage URIs/paths (`cheques.image_path`) and cryptographic SHA-256 digests (`cheques.image_hash`) are persisted. This prevents database bloat, maintains lean buffer pools, and enables standard cloud object storage (S3 / GCS / NAS) integration.
-3. **Leading-Zero & Identity Preservation**: Banking identifiers (`cheque_number`, `account_number`, `branch_code`, `date`) are stored as explicit text fields (`VARCHAR` / `TEXT`) rather than integers, guaranteeing zero data truncation or loss of leading zeros (e.g. `'004128'`).
-4. **Complete Audit Trail & Model Provenance**:
-   - Model versions (`detector_model_version`, `recognizer_model_version`, `ocr_engine_version`) are permanently recorded per execution run.
-   - Both **raw model outputs** (pre-normalization) and **sanitized values** (post-normalization) are retained side-by-side.
-   - Multi-stage confidence scores (detection, extraction, composite) are preserved.
-   - Validation outcomes, failure gates, and exact reasons for review are logged with teller resolution histories.
-5. **Zero Hardcoded Secrets**: All connection credentials and host parameters are driven strictly by environment variables with fallback parameter reconstruction.
+ChequeSense uses **PostgreSQL 14+** as its primary persistence layer, accessed via **SQLAlchemy 2.0** ORM with the `mapped_column` / `Mapped` typed column syntax. Schema migrations are managed with **Alembic**.
 
 ---
 
-## 2. Entity-Relationship Diagram (ERD)
+## Design Principles
 
-```mermaid
-erDiagram
-    users ||--o{ cheques : "creates/submits"
-    users ||--o{ validation_results : "reviews/approves"
-    cheques ||--|{ processing_runs : "executes"
-    cheques ||--o{ predictions : "has raw inferences"
-    cheques ||--o{ extracted_fields : "has normalized fields"
-    cheques ||--o{ validation_results : "undergoes validation"
-    processing_runs ||--o{ predictions : "generates"
-    processing_runs ||--o{ extracted_fields : "produces"
-    processing_runs ||--o{ validation_results : "evaluates"
+1. **No image binaries in the database.** Only file paths or object-storage URI references are stored.
+2. **Preserve raw data.** Both `raw_value` (exact model output) and `normalized_value` (cleaned value) are stored for every extracted field.
+3. **Preserve model provenance.** Every `ProcessingRun` records which model versions were used.
+4. **Normalised schema.** Each entity has a single table. No denormalisation except the `username` column in `audit_logs` (for immutability).
+5. **Environment-variable credentials.** No passwords in code or config files.
 
-    users {
-        int id PK
-        string username UK
-        string email UK
-        string hashed_password
-        string role
-        boolean is_active
-        datetime created_at
-        datetime updated_at
-    }
+---
 
-    cheques {
-        int id PK
-        string cheque_identifier UK
-        string image_path
-        int image_width
-        int image_height
-        string image_hash IX
-        string source_dataset
-        string status IX
-        float overall_confidence
-        boolean review_required IX
-        int created_by_user_id FK
-        datetime created_at IX
-        datetime updated_at
-    }
+## Schema Diagram
 
-    processing_runs {
-        int id PK
-        int cheque_id FK
-        datetime run_timestamp IX
-        string status
-        string detector_model_version
-        string recognizer_model_version
-        string ocr_engine_version
-        float total_latency_ms
-        jsonb stage_latencies_json
-    }
-
-    predictions {
-        int id PK
-        int processing_run_id FK
-        int cheque_id FK
-        string stage
-        string model_name
-        string model_version
-        string field_name IX
-        text raw_output
-        float raw_confidence
-        jsonb bounding_box_json
-        datetime created_at
-    }
-
-    extracted_fields {
-        int id PK
-        int cheque_id FK
-        int processing_run_id FK
-        string field_name IX
-        text raw_value
-        text normalized_value
-        float confidence
-        float detection_confidence
-        float extraction_confidence
-        string extraction_method
-        string confidence_tier IX
-        jsonb bounding_box_json
-        datetime created_at
-    }
-
-    validation_results {
-        int id PK
-        int cheque_id FK
-        int processing_run_id FK
-        string field_name IX
-        string check_type IX
-        string validation_status IX
-        boolean is_valid
-        text validation_reason
-        string review_priority
-        int reviewed_by_user_id FK
-        string review_resolution
-        datetime reviewed_at
-        datetime created_at
-    }
+```
+users
+  id, username, email, hashed_password, role, is_active, created_at, updated_at
+  │
+  ├─── cheques (created_by_user_id → users.id)
+  │      id, cheque_identifier, image_path, image_hash,
+  │      image_width, image_height, source_dataset,
+  │      status, overall_confidence, review_required,
+  │      created_by_user_id, created_at, updated_at
+  │      │
+  │      ├─── processing_runs (cheque_id → cheques.id)
+  │      │      id, cheque_id, run_timestamp, status,
+  │      │      detector_model_version, recognizer_model_version, ocr_engine_version,
+  │      │      total_latency_ms, stage_latencies_json
+  │      │      │
+  │      │      ├─── predictions (processing_run_id, cheque_id)
+  │      │      │      id, stage, model_name, model_version, field_name,
+  │      │      │      raw_output, raw_confidence, bounding_box_json, created_at
+  │      │      │
+  │      │      ├─── extracted_fields (processing_run_id, cheque_id)
+  │      │      │      id, field_name, raw_value, normalized_value,
+  │      │      │      confidence, detection_confidence, extraction_confidence,
+  │      │      │      extraction_method, confidence_tier, bounding_box_json, created_at
+  │      │      │
+  │      │      └─── validation_results (processing_run_id, cheque_id)
+  │      │             id, field_name, check_type, validation_status, is_valid,
+  │      │             validation_reason, review_priority,
+  │      │             reviewed_by_user_id, review_resolution, reviewed_at, created_at
+  │      │
+  └─── audit_logs (user_id → users.id)
+         id, timestamp, user_id, username, action,
+         resource_type, resource_id, details_json, ip_address
 ```
 
 ---
 
-## 3. Database Schema Specification
+## Table Definitions
 
-### 3.1 `users`
-Represents bank tellers, compliance officers, and system administrators.
-- `id` (INTEGER, PK, Autoincrement)
-- `username` (VARCHAR(64), UNIQUE, NOT NULL, Index)
-- `email` (VARCHAR(255), UNIQUE, NOT NULL, Index)
-- `hashed_password` (VARCHAR(255), NOT NULL): SHA-256 / bcrypt hash; raw password is never stored.
-- `role` (VARCHAR(32), NOT NULL, Default: `'TELLER'`): e.g. `'TELLER'`, `'AUDITOR'`, `'ADMIN'`.
-- `is_active` (BOOLEAN, NOT NULL, Default: `TRUE`)
-- `created_at` (TIMESTAMP WITH TIME ZONE, NOT NULL, Default: `now()`)
-- `updated_at` (TIMESTAMP WITH TIME ZONE, NOT NULL, Default: `now()`)
+### `users`
 
-### 3.2 `cheques`
-Master document record for each incoming cheque.
-- `id` (INTEGER, PK, Autoincrement)
-- `cheque_identifier` (VARCHAR(128), UNIQUE, NOT NULL, Index): Unique reference number or filename.
-- `image_path` (VARCHAR(512), NOT NULL): URI or path to image on disk or cloud storage bucket.
-- `image_width` (INTEGER, NOT NULL): Pixel width.
-- `image_height` (INTEGER, NOT NULL): Pixel height.
-- `image_hash` (VARCHAR(64), NOT NULL, Index): SHA-256 digest of image bytes for deduplication.
-- `source_dataset` (VARCHAR(64), NOT NULL, Default: `'production'`): Dataset origin tag.
-- `status` (VARCHAR(32), NOT NULL, Default: `'PROCESSED'`, Index): `'PROCESSED'`, `'VERIFIED'`, `'REVIEW_REQUIRED'`, `'INVALID'`.
-- `overall_confidence` (FLOAT, NOT NULL, Default: `0.0`): Composite confidence across detected fields.
-- `review_required` (BOOLEAN, NOT NULL, Default: `FALSE`, Index): Urgent queue filter flag.
-- `created_by_user_id` (INTEGER, FK -> `users.id`, NULLABLE): Teller or ingest operator.
-- `created_at` (TIMESTAMP WITH TIME ZONE, NOT NULL, Default: `now()`, Index)
-- `updated_at` (TIMESTAMP WITH TIME ZONE, NOT NULL, Default: `now()`)
-- **Compound Indexes**:
-  - `idx_cheques_status_review` on `(status, review_required)`
-  - `idx_cheques_created_at_status` on `(created_at, status)`
+Banking system users, compliance officers, tellers, and service accounts.
 
-### 3.3 `processing_runs`
-Audit telemetry capturing individual ML pipeline execution attempts.
-- `id` (INTEGER, PK, Autoincrement)
-- `cheque_id` (INTEGER, FK -> `cheques.id` ON DELETE CASCADE, NOT NULL, Index)
-- `run_timestamp` (TIMESTAMP WITH TIME ZONE, NOT NULL, Default: `now()`, Index)
-- `status` (VARCHAR(32), NOT NULL, Default: `'SUCCESS'`)
-- `detector_model_version` (VARCHAR(128), NOT NULL): e.g. `'fasterrcnn_mobilenet_v3_large_fpn:v1.0'`
-- `recognizer_model_version` (VARCHAR(128), NOT NULL): e.g. `'cheque_digit_cnn:v1.0'`
-- `ocr_engine_version` (VARCHAR(128), NOT NULL): e.g. `'tesseract:5.5.1'`
-- `total_latency_ms` (FLOAT, NOT NULL, Default: `0.0`): Execution time.
-- `stage_latencies_json` (JSONB / JSON, NULLABLE): Detailed breakdown per pipeline stage.
-
-### 3.4 `predictions`
-Raw model inferences recorded before sanitization, business filtering, or post-processing.
-- `id` (INTEGER, PK, Autoincrement)
-- `processing_run_id` (INTEGER, FK -> `processing_runs.id` ON DELETE CASCADE, NOT NULL, Index)
-- `cheque_id` (INTEGER, FK -> `cheques.id` ON DELETE CASCADE, NOT NULL, Index)
-- `stage` (VARCHAR(64), NOT NULL): `'FIELD_DETECTION'`, `'OCR_EXTRACTION'`, `'HANDWRITTEN_RECOGNITION'`.
-- `model_name` (VARCHAR(128), NOT NULL)
-- `model_version` (VARCHAR(64), NOT NULL)
-- `field_name` (VARCHAR(64), NOT NULL, Index): e.g. `'cheque_number'`, `'amount'`, `'date'`.
-- `raw_output` (TEXT, NOT NULL): Unaltered string or bounding coordinate string.
-- `raw_confidence` (FLOAT, NOT NULL, Default: `0.0`)
-- `bounding_box_json` (JSONB / JSON, NULLABLE): Spatial coordinates `{xmin, ymin, xmax, ymax}`.
-- `created_at` (TIMESTAMP WITH TIME ZONE, NOT NULL, Default: `now()`)
-- **Compound Index**:
-  - `idx_predictions_run_field` on `(processing_run_id, field_name)`
-
-### 3.5 `extracted_fields`
-Sanitized, validated field values ready for banking ledger posting.
-- `id` (INTEGER, PK, Autoincrement)
-- `cheque_id` (INTEGER, FK -> `cheques.id` ON DELETE CASCADE, NOT NULL, Index)
-- `processing_run_id` (INTEGER, FK -> `processing_runs.id` ON DELETE CASCADE, NOT NULL, Index)
-- `field_name` (VARCHAR(64), NOT NULL, Index): `'cheque_number'`, `'amount'`, `'date'`, etc.
-- `raw_value` (TEXT, NOT NULL): Raw input value for auditing.
-- `normalized_value` (TEXT, NOT NULL): Formatted value preserving leading zeros (`'004128'`).
-- `confidence` (FLOAT, NOT NULL, Default: `0.0`): Composite confidence score.
-- `detection_confidence` (FLOAT, NOT NULL, Default: `0.0`)
-- `extraction_confidence` (FLOAT, NOT NULL, Default: `0.0`)
-- `extraction_method` (VARCHAR(32), NOT NULL, Default: `'ocr'`): `'ocr'`, `'recognizer'`, `'hybrid'`.
-- `confidence_tier` (VARCHAR(16), NOT NULL, Default: `'MEDIUM'`, Index): `'HIGH'`, `'MEDIUM'`, `'LOW'`.
-- `bounding_box_json` (JSONB / JSON, NULLABLE): Spatial bounds.
-- `created_at` (TIMESTAMP WITH TIME ZONE, NOT NULL, Default: `now()`)
-- **Compound Index**:
-  - `idx_extracted_fields_cheque_name` on `(cheque_id, field_name)`
-
-### 3.6 `validation_results`
-Business compliance validation outcomes and human teller audit resolutions.
-- `id` (INTEGER, PK, Autoincrement)
-- `cheque_id` (INTEGER, FK -> `cheques.id` ON DELETE CASCADE, NOT NULL, Index)
-- `processing_run_id` (INTEGER, FK -> `processing_runs.id` ON DELETE CASCADE, NOT NULL, Index)
-- `field_name` (VARCHAR(64), NULLABLE, Index): Specific field evaluated or NULL for document-level check.
-- `check_type` (VARCHAR(64), NOT NULL, Index): `'FORMAT'`, `'DATE_VALIDITY'`, `'CONSISTENCY'`, `'REQUIRED_FIELD'`, `'CONFIDENCE_GATE'`.
-- `validation_status` (VARCHAR(32), NOT NULL, Default: `'VALID'`, Index): `'VALID'`, `'INVALID'`, `'WARNING'`.
-- `is_valid` (BOOLEAN, NOT NULL, Default: `TRUE`)
-- `validation_reason` (TEXT, NOT NULL): Preserved diagnostic description for review trigger.
-- `review_priority` (VARCHAR(16), NOT NULL, Default: `'MEDIUM'`): `'HIGH'`, `'MEDIUM'`, `'LOW'`.
-- `reviewed_by_user_id` (INTEGER, FK -> `users.id`, NULLABLE): Reviewing teller.
-- `review_resolution` (VARCHAR(32), NULLABLE, Default: `'PENDING'`): `'PENDING'`, `'ACCEPTED'`, `'REJECTED'`, `'CORRECTED'`.
-- `reviewed_at` (TIMESTAMP WITH TIME ZONE, NULLABLE)
-- `created_at` (TIMESTAMP WITH TIME ZONE, NOT NULL, Default: `now()`)
-- **Compound Index**:
-  - `idx_validation_cheque_status` on `(cheque_id, validation_status)`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | INTEGER | PK, autoincrement | Internal user ID |
+| `username` | VARCHAR(64) | UNIQUE, NOT NULL, INDEX | Login username |
+| `email` | VARCHAR(255) | UNIQUE, NOT NULL, INDEX | Email address |
+| `hashed_password` | VARCHAR(255) | NOT NULL | bcrypt hash |
+| `role` | VARCHAR(32) | NOT NULL | ADMIN / EMPLOYEE / REVIEWER / ANALYST |
+| `is_active` | BOOLEAN | NOT NULL, default TRUE | Account enabled flag |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NOT NULL | Creation time |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NOT NULL | Last update time |
 
 ---
 
-## 4. Environment Configuration & Security
+### `cheques`
 
-Credentials must **never** be hardcoded. The application reads configuration from environment variables (or `.env` file via `python-dotenv`).
+Core cheque document entity.
 
-### Key Parameters:
-```ini
-# Database Connection Parameters
-POSTGRES_USER=karansingh
-POSTGRES_PASSWORD=
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=chequesense
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | INTEGER | PK | Internal cheque ID |
+| `cheque_identifier` | VARCHAR(128) | UNIQUE, NOT NULL, INDEX | Business-level ID (e.g., CHQ-20240115-00001) |
+| `image_path` | VARCHAR(512) | NOT NULL | Filesystem path or object-storage URI |
+| `image_width` | INTEGER | NOT NULL | Image width in pixels |
+| `image_height` | INTEGER | NOT NULL | Image height in pixels |
+| `image_hash` | VARCHAR(64) | NOT NULL, INDEX | SHA-256 hex of image bytes (deduplication) |
+| `source_dataset` | VARCHAR(64) | NOT NULL | Source dataset label or "production" |
+| `status` | VARCHAR(32) | NOT NULL, INDEX | PROCESSED / VERIFIED / REVIEW_REQUIRED / INVALID |
+| `overall_confidence` | FLOAT | NOT NULL | Mean composite confidence across fields |
+| `review_required` | BOOLEAN | NOT NULL, INDEX | Quick filter flag |
+| `created_by_user_id` | INTEGER | FK → users.id, nullable | Uploading user |
+| `created_at` | TIMESTAMP WITH TIME ZONE | NOT NULL, INDEX | Upload timestamp |
+| `updated_at` | TIMESTAMP WITH TIME ZONE | NOT NULL | Last update |
 
-# Or Direct Connection URI
-DATABASE_URL=postgresql+psycopg2:///chequesense
+**Compound indexes:**
+- `idx_cheques_status_review` on (`status`, `review_required`)
+- `idx_cheques_created_at_status` on (`created_at`, `status`)
+
+---
+
+### `processing_runs`
+
+Audit log of individual pipeline execution passes.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `cheque_id` | INTEGER FK | References `cheques.id` (CASCADE DELETE) |
+| `run_timestamp` | TIMESTAMP WITH TIME ZONE | When the run started |
+| `status` | VARCHAR(32) | SUCCESS / FAILED |
+| `detector_model_version` | VARCHAR(128) | E.g., "faster_rcnn_resnet50_fpn_v1" |
+| `recognizer_model_version` | VARCHAR(128) | E.g., "mnist_cnn_v1" |
+| `ocr_engine_version` | VARCHAR(128) | E.g., "tesseract-5.3.3" |
+| `total_latency_ms` | FLOAT | Total wall-clock time in milliseconds |
+| `stage_latencies_json` | JSONB | Per-stage breakdown: preprocessing, detection, extraction |
+
+---
+
+### `predictions`
+
+Raw model outputs before post-processing.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `processing_run_id` | INTEGER FK | References `processing_runs.id` |
+| `cheque_id` | INTEGER FK | References `cheques.id` |
+| `stage` | VARCHAR(64) | FIELD_DETECTION / OCR_EXTRACTION / HANDWRITTEN_RECOGNITION |
+| `model_name` | VARCHAR(128) | Name of the model that produced this prediction |
+| `model_version` | VARCHAR(64) | Version string |
+| `field_name` | VARCHAR(64) | date / amount / ifsc / acno / sign / name |
+| `raw_output` | TEXT | Verbatim model output (JSON string for detection, text for OCR) |
+| `raw_confidence` | FLOAT | Model-reported confidence |
+| `bounding_box_json` | JSONB | `{x1, y1, x2, y2}` in pixels, nullable |
+
+**Index:** `idx_predictions_run_field` on (`processing_run_id`, `field_name`)
+
+---
+
+### `extracted_fields`
+
+Sanitised, normalised field values ready for downstream use.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `cheque_id` | INTEGER FK | |
+| `processing_run_id` | INTEGER FK | |
+| `field_name` | VARCHAR(64) | |
+| `raw_value` | TEXT | Exact OCR/recogniser output, no cleaning |
+| `normalized_value` | TEXT | Post-processed: leading zeros preserved, date formatted |
+| `confidence` | FLOAT | Composite confidence (det × extraction) |
+| `detection_confidence` | FLOAT | Faster R-CNN objectness score |
+| `extraction_confidence` | FLOAT | Tesseract word confidence or CNN softmax probability |
+| `extraction_method` | VARCHAR(32) | `ocr` / `recognizer` / `hybrid` |
+| `confidence_tier` | VARCHAR(16) | HIGH / MEDIUM / LOW |
+| `bounding_box_json` | JSONB | Field bounding box |
+
+**Index:** `idx_extracted_fields_cheque_name` on (`cheque_id`, `field_name`)
+
+---
+
+### `validation_results`
+
+Validation outcomes, business rule checks, and reviewer resolution records.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `cheque_id` | INTEGER FK | |
+| `processing_run_id` | INTEGER FK | |
+| `field_name` | VARCHAR(64) | Nullable (for cross-field or document-level checks) |
+| `check_type` | VARCHAR(64) | FORMAT / DATE_VALIDITY / CONSISTENCY / REQUIRED_FIELD / CONFIDENCE_GATE |
+| `validation_status` | VARCHAR(32) | VALID / INVALID / WARNING |
+| `is_valid` | BOOLEAN | Quick boolean |
+| `validation_reason` | TEXT | Human-readable failure reason |
+| `review_priority` | VARCHAR(16) | HIGH / MEDIUM / LOW |
+| `reviewed_by_user_id` | INTEGER FK | Reviewer (nullable) |
+| `review_resolution` | VARCHAR(32) | PENDING / ACCEPTED / REJECTED / CORRECTED |
+| `reviewed_at` | TIMESTAMP | When reviewer acted |
+
+**Index:** `idx_validation_cheque_status` on (`cheque_id`, `validation_status`)
+
+---
+
+### `audit_logs`
+
+Immutable audit trail for compliance and security events.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `timestamp` | TIMESTAMP WITH TIME ZONE | UTC time of action |
+| `user_id` | INTEGER FK | References `users.id` (SET NULL on user delete) |
+| `username` | VARCHAR(64) | Denormalised: preserved even if user is deleted |
+| `action` | VARCHAR(64) | LOGIN / UPLOAD_CHEQUE / PROCESS_CHEQUE / MANUAL_CORRECTION / STATUS_CHANGE |
+| `resource_type` | VARCHAR(64) | cheque / user / validation_result / auth |
+| `resource_id` | VARCHAR(128) | ID of the affected resource |
+| `details_json` | JSONB | Action-specific metadata |
+| `ip_address` | VARCHAR(45) | Client IP (supports IPv6) |
+
+**Index:** `idx_audit_logs_action_timestamp` on (`action`, `timestamp`)
+
+---
+
+## Migrations
+
+ChequeSense uses **Alembic** for schema versioning.
+
+### Commands
+
+```bash
+# Apply all pending migrations
+alembic upgrade head
+
+# Generate a new migration from model changes
+alembic revision --autogenerate -m "add_field_description"
+
+# Downgrade one step
+alembic downgrade -1
+
+# Show current migration state
+alembic current
 ```
 
-### Connection URL Resolution:
-In `src/database/connection.py`:
-1. Checks for direct `DATABASE_URL`.
-2. If absent, dynamically constructs `postgresql+psycopg2://{user}:{encoded_password}@{host}:{port}/{db_name}`.
-3. Automatically falls back gracefully for unit tests using in-memory SQLite when configured.
+Migration scripts are stored in `src/database/migrations/versions/`.
 
 ---
 
-## 5. Database Initialization & Alembic Migrations
+## Indexes
 
-### Initializing Tables via SQLAlchemy
-To create all tables programmatically without migrations (useful in clean environments or tests):
+The following indexes are created for frequent query patterns:
+
+| Index | Table | Columns | Purpose |
+|---|---|---|---|
+| `idx_cheques_status_review` | cheques | status, review_required | Review queue queries |
+| `idx_cheques_created_at_status` | cheques | created_at, status | Time-series analytics |
+| `idx_predictions_run_field` | predictions | processing_run_id, field_name | Field-level prediction lookup |
+| `idx_extracted_fields_cheque_name` | extracted_fields | cheque_id, field_name | Field value retrieval |
+| `idx_validation_cheque_status` | validation_results | cheque_id, validation_status | Validation filtering |
+| `idx_audit_logs_action_timestamp` | audit_logs | action, timestamp | Audit queries |
+
+---
+
+## Connection Configuration
+
 ```python
-from src.database.connection import init_db
-init_db()
+# src/database/connection.py
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+DATABASE_URL = os.environ["DATABASE_URL"]  # No hard-coded credentials
+
+engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 ```
 
-### Managing Schema Migrations with Alembic
-Alembic migration configuration is located at `alembic.ini` and `src/database/migrations/`.
-
-1. **Check Migration Status**:
-   ```bash
-   alembic current
-   ```
-
-2. **Generate New Migration Revision**:
-   ```bash
-   alembic revision --autogenerate -m "add_new_audit_column"
-   ```
-
-3. **Apply Migrations (Upgrade to Head)**:
-   ```bash
-   alembic upgrade head
-   ```
-
-4. **Rollback Last Migration**:
-   ```bash
-   alembic downgrade -1
-   ```
+See [`.env.example`](../.env.example) for the `DATABASE_URL` format.
 
 ---
 
-## 6. CRUD & Atomic Pipeline Ingestion
+## CRUD Operations
 
-The repository layer (`src/database/crud.py`) provides typed functions for all entities, as well as an atomic transaction helper `save_pipeline_execution()` bridging the ML pipeline directly into the database.
+All database operations are implemented in `src/database/crud.py`:
 
-### Example: Ingesting Pipeline Output
-```python
-from src.database.connection import db_session_scope
-from src.database.crud import save_pipeline_execution
-from src.pipeline.pipeline import ChequeProcessingPipeline
-from src.validation.review_queue import ReviewQueueManager
-
-pipeline = ChequeProcessingPipeline()
-queue_mgr = ReviewQueueManager()
-
-# Process image
-pipeline_result = pipeline.process_image("path/to/cheque.png")
-review_item = queue_mgr.process_and_enqueue(pipeline_result)
-
-# Atomic database save
-with db_session_scope() as session:
-    cheque = save_pipeline_execution(
-        db=session,
-        cheque_identifier="CHQ_CANARA_0091",
-        image_path="data/raw/cheque_0091.png",
-        image_width=1200,
-        image_height=600,
-        image_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        pipeline_result=pipeline_result,
-        review_item=review_item,
-        detector_version="fasterrcnn:v1.0",
-        recognizer_version="cnn:v1.0",
-        ocr_version="tesseract:v5.5.1",
-    )
-    print(f"Persisted Cheque ID: {cheque.id}, Status: {cheque.status}")
-```
-
-### Example: Teller Review Resolution
-```python
-from src.database.connection import db_session_scope
-from src.database.crud import update_review_resolution
-
-with db_session_scope() as session:
-    resolved_val = update_review_resolution(
-        db=session,
-        validation_id=14,
-        reviewed_by_user_id=1,
-        resolution="ACCEPTED",
-    )
-```
-
----
-
-## 7. Performance & Indexing Strategy
-
-To support sub-millisecond lookups under high transaction volume:
-- **`cheques.cheque_identifier` (Unique B-tree)**: Instant primary business key lookups.
-- **`cheques.image_hash` (B-tree)**: Rapid deduplication prevention before running expensive GPU/CPU inference passes.
-- **`idx_cheques_status_review` (Compound B-tree)**: Optimizes teller review dashboards (`WHERE status = 'REVIEW_REQUIRED' AND review_required = TRUE`).
-- **`idx_extracted_fields_cheque_name` (Compound B-tree)**: Rapid retrieval of individual cheque fields for verification screens.
-- **`idx_predictions_run_field` (Compound B-tree)**: Accelerates ML audit and model comparison queries.
-- **`idx_validation_cheque_status` (Compound B-tree)**: Fast compliance reporting and audit sampling.
+| Function | Description |
+|---|---|
+| `create_cheque()` | Insert new cheque record |
+| `get_cheque_by_id()` | Fetch cheque with all relationships |
+| `get_cheque_by_hash()` | Deduplication lookup |
+| `list_cheques()` | Paginated list with status/review filters |
+| `save_pipeline_execution()` | Atomic save of run, predictions, fields, and validations |
+| `correct_cheque_fields()` | Update field value from reviewer correction |

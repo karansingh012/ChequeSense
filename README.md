@@ -1,197 +1,553 @@
 # ChequeSense
 
-[![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-Proprietary-red.svg)]()
-[![Code Architecture](https://img.shields.io/badge/architecture-modular-green.svg)]()
-
-> **AI-Powered Handwritten Cheque Processing and Banking Analytics System**
-
-ChequeSense is an end-to-end intelligent banking document pipeline compliant with **CTS-2010 (Cheque Truncation System)** standards. It localizes key cheque fields, extracts printed and cursive handwritten text, parses magnetic E-13B MICR bands, and cross-validates legal amount (words) against courtesy amount (figures) for automated banking verification and fraud detection.
+> **AI-Powered Bank Cheque Processing and Extraction System**  
+> B.Tech CSE / Data Science Final Year Project
 
 ---
 
-## Repository Structure
+## Table of Contents
 
-```text
+1. [Problem Statement](#1-problem-statement)
+2. [Motivation](#2-motivation)
+3. [Objectives](#3-objectives)
+4. [System Architecture](#4-system-architecture)
+5. [Dataset Description](#5-dataset-description)
+6. [Dataset Sources](#6-dataset-sources)
+7. [ML Methodology](#7-ml-methodology)
+8. [Field Detection](#8-field-detection)
+9. [Handwriting Recognition](#9-handwriting-recognition)
+10. [OCR and NLP](#10-ocr-and-nlp)
+11. [Validation](#11-validation)
+12. [Database Architecture](#12-database-architecture)
+13. [API Architecture](#13-api-architecture)
+14. [Dashboard](#14-dashboard)
+15. [Authentication](#15-authentication)
+16. [Evaluation Metrics](#16-evaluation-metrics)
+17. [Results](#17-results)
+18. [Limitations](#18-limitations)
+19. [Future Scope](#19-future-scope)
+20. [Installation](#20-installation)
+21. [Usage](#21-usage)
+22. [Docker Instructions](#22-docker-instructions)
+23. [Project Structure](#23-project-structure)
+
+---
+
+## 1. Problem Statement
+
+Manual cheque processing in Indian banking is slow, error-prone, and labour-intensive. Bank tellers must visually read each field—payee name, amount, date, IFSC code, and account number—transcribe them into core banking systems, and manually verify formatting rules. This creates bottlenecks in high-volume branches, increases transcription errors, and raises operational costs.
+
+ChequeSense addresses this problem by building an end-to-end automated pipeline that accepts a scanned or photographed cheque image, localises key fields using object detection, extracts field values using OCR and a handwritten digit recogniser, applies banking validation rules, and produces a structured JSON output suitable for downstream systems.
+
+---
+
+## 2. Motivation
+
+- **Scale:** Indian banks collectively process hundreds of millions of cheques annually. Even partial automation reduces manual labour significantly.
+- **Accuracy:** Human transcription errors in financial documents can have direct monetary consequences. A system that flags uncertain predictions for human review is safer than unassisted manual entry.
+- **Research opportunity:** Cheque processing requires a heterogeneous ML stack—object detection, printed OCR, and handwritten recognition—making it a rich applied ML problem.
+- **Responsible AI:** The system is designed to assist human reviewers, not replace them. Low-confidence predictions are always escalated for human review rather than auto-accepted.
+
+---
+
+## 3. Objectives
+
+1. Build a modular, multi-stage ML pipeline for automated cheque field extraction.
+2. Train a Faster R-CNN object detector to localise six field regions on synthetic cheque images.
+3. Train a CNN-based handwritten digit recogniser on MNIST as a baseline.
+4. Integrate Tesseract OCR for printed/typed text extraction from detected regions.
+5. Design a confidence propagation system that assigns a composite confidence score to each extracted field.
+6. Implement a business-rule validation layer that enforces format, date, and completeness constraints.
+7. Build a normalised PostgreSQL persistence layer that stores predictions, extracted fields, and validation outcomes.
+8. Expose the pipeline via a FastAPI REST backend with role-based access control.
+9. Provide a Streamlit dashboard for upload, review, and analytics workflows.
+10. Containerise the complete system using Docker and Docker Compose.
+11. Perform honest evaluation on held-out test data and document both strengths and failures.
+
+---
+
+## 4. System Architecture
+
+![System Architecture](docs/architecture_diagram.jpg)
+
+```
+Cheque Image
+    │
+    ▼
+┌─────────────────────────────────────────────┐
+│             Image Preprocessing              │
+│  Resize · CLAHE enhancement · Normalise     │
+└────────────────────┬────────────────────────┘
+                     ▼
+┌─────────────────────────────────────────────┐
+│            Field Detection                  │
+│  Faster R-CNN → 6 bounding boxes            │
+│  date · amount · IFSC · acno · sign · name  │
+└────────────────────┬────────────────────────┘
+                     ▼
+┌─────────────────────────────────────────────┐
+│         Recognition + OCR                   │
+│  Tesseract OCR (text fields)                │
+│  CNN Recogniser (numeric digit crops)       │
+└────────────────────┬────────────────────────┘
+                     ▼
+┌─────────────────────────────────────────────┐
+│        Field Reconstruction                 │
+│  Composite confidence · Normalization       │
+└────────────────────┬────────────────────────┘
+                     ▼
+┌─────────────────────────────────────────────┐
+│          Validation Layer                   │
+│  Format · Date · Required-field · Threshold │
+│  PROCESSED / VERIFIED / REVIEW_REQUIRED /   │
+│  INVALID                                    │
+└────────────────────┬────────────────────────┘
+                     │
+             ┌───────┴───────┐
+             ▼               ▼
+        FastAPI          PostgreSQL
+        REST API          Database
+             │               │
+             └───────┬───────┘
+                     ▼
+             Streamlit Dashboard
+             (Upload · Review · Analytics)
+```
+
+---
+
+## 5. Dataset Description
+
+### 5.1 Synthetic Cheque Dataset (Field Detection)
+
+Programmatically generated synthetic Indian bank cheque images created using Pillow. Randomised field values at randomised positions within a realistic cheque template. Ground-truth bounding boxes stored in COCO JSON format.
+
+- **Training images:** ~280 | **Validation:** ~57 | **Test:** 43
+- **Classes:** `date`, `amount`, `ifsc`, `acno`, `sign`, `name`
+- **Format:** COCO JSON bounding box annotations
+
+### 5.2 MNIST Handwritten Digit Dataset (Recognition)
+
+Standard MNIST for CNN-based digit classification.
+
+- **Train:** 60,000 | **Test:** 10,000
+- **Classes:** 0–9
+- **Format:** 28×28 greyscale images
+
+> **Note:** MNIST provides isolated single-digit images. The recogniser classifies one digit at a time; multi-digit sequence reading is not supported by the current implementation.
+
+### 5.3 IDRBT Cheque Image Dataset (OCR / Pipeline Evaluation)
+
+A subset of real cheque images from the IDRBT dataset, used read-only for evaluation only—not used in training.
+
+- **Pipeline test samples:** 212 images
+- **Use:** OCR performance and end-to-end pipeline benchmarking
+
+---
+
+## 6. Dataset Sources
+
+| Dataset | Source | Access |
+|---|---|---|
+| Synthetic Cheque Dataset | Generated in-project (`scripts/generate_synthetic_cheques.py`) | Local |
+| MNIST | [yann.lecun.com/exdb/mnist](http://yann.lecun.com/exdb/mnist/) | `torchvision.datasets.MNIST` |
+| IDRBT Cheque Images | [IDRBT, Hyderabad](https://www.idrbt.ac.in/) | Institutional / research access |
+
+> Dataset files are excluded from the Docker image and the Git repository (see `.gitignore`).
+
+---
+
+## 7. ML Methodology
+
+Three distinct ML components operate in sequence:
+
+```
+Input Image
+    ├─→ [Faster R-CNN]       Field localisation → Bounding boxes + detection confidence
+    ├─→ [Tesseract OCR]      Text extraction per cropped region → raw text + OCR confidence
+    └─→ [CNN Classifier]     Digit classification for numeric crops → class + softmax probability
+```
+
+**Composite confidence:**
+
+```
+composite_confidence = detection_confidence × extraction_confidence
+```
+
+Fields with `composite_confidence < 0.60` are flagged for human review.
+
+---
+
+## 8. Field Detection
+
+**Model:** Faster R-CNN with ResNet-50 FPN backbone, fine-tuned from ImageNet/COCO pre-trained weights.
+
+**Training:** Input resize 1333×800, augmentations (flip, colour jitter, ±10° rotation), SGD momentum optimiser, 20 epochs, batch size 4.
+
+### Detection Results (Synthetic Test Set — 43 images, 258 GT boxes)
+
+| Field | Precision@50 | Recall@50 | F1@50 | AP@50 | AP@50:95 |
+|---|---|---|---|---|---|
+| date | 1.000 | 1.000 | 1.000 | 1.000 | 0.860 |
+| amount | 1.000 | 1.000 | 1.000 | 1.000 | 0.806 |
+| ifsc | 0.896 | 1.000 | 0.945 | 1.000 | 0.660 |
+| acno | 1.000 | 1.000 | 1.000 | 1.000 | 0.782 |
+| sign | 1.000 | 1.000 | 1.000 | 1.000 | 0.709 |
+| name | 1.000 | 1.000 | 1.000 | 1.000 | 0.875 |
+| **Mean** | **0.983** | **1.000** | **0.991** | **1.000** | **0.782** |
+
+> These results are on synthetic test images from the same distribution as training. Generalisation to real cheques has not been validated.
+
+---
+
+## 9. Handwriting Recognition
+
+**Model:** Four-layer CNN trained on MNIST for 10-class isolated digit classification.
+
+### Recognition Results (IDRBT crops — 182 samples)
+
+| Metric | Value |
+|---|---|
+| Accuracy | **42.86%** |
+| Macro Precision | 0.4931 |
+| Macro Recall | 0.4177 |
+| Macro F1 | 0.4146 |
+
+**Most confused pairs:** 1↔4 (7 errors), 1↔7 (6 errors), 4↔8 (5 errors)
+
+> The 42.86% accuracy reflects the domain gap between MNIST (clean isolated digits) and real cheque digit crops (handwritten on coloured templates). The pipeline routes all low-confidence recognitions to human review.
+
+---
+
+## 10. OCR and NLP
+
+**Engine:** Tesseract 5.x with field-specific page segmentation modes (PSM 7/8).
+
+**Post-processing:** IFSC regex validation, leading-zero preservation, date normalisation to DD/MM/YYYY, amount decimal normalisation.
+
+### OCR Results (IDRBT test set — 169 samples)
+
+| Metric | Value |
+|---|---|
+| Word Exact Match Accuracy | **0.2%** |
+| Word Error Rate (WER) | 99.8% |
+| Date field presence rate | 89.4% |
+| Amount field presence rate | 36.7% |
+| Name field presence rate | 43.8% |
+
+> Tesseract is optimised for printed text. The high WER on handwritten cheque fields is expected. The confidence propagation system correctly identifies these failures and routes them to REVIEW_REQUIRED or INVALID.
+
+---
+
+## 11. Validation
+
+Rules applied after field extraction. **No fraud determinations are made.**
+
+| Rule | Check Type | Action |
+|---|---|---|
+| Required fields present | `REQUIRED_FIELD` | INVALID if missing |
+| IFSC format | `FORMAT` | REVIEW_REQUIRED if invalid |
+| Account number format | `FORMAT` | REVIEW_REQUIRED if invalid |
+| Date validity (not future, not >6 months old) | `DATE_VALIDITY` | REVIEW_REQUIRED |
+| Confidence gate (composite ≥ 0.60) | `CONFIDENCE_GATE` | REVIEW_REQUIRED if below |
+
+### Processing Statuses
+
+| Status | Meaning |
+|---|---|
+| `PROCESSED` | Pipeline completed, validation pending |
+| `VERIFIED` | All fields pass all validation rules |
+| `REVIEW_REQUIRED` | One or more fields require human review |
+| `INVALID` | Required field missing or hard rule failed |
+
+Per field, the system preserves: `raw_value`, `normalized_value`, `confidence`, `detection_confidence`, `extraction_confidence`, `confidence_tier`, `validation_reason`.
+
+---
+
+## 12. Database Architecture
+
+**PostgreSQL** via SQLAlchemy ORM. Seven normalised tables:
+
+```
+users · cheques · processing_runs · predictions ·
+extracted_fields · validation_results · audit_logs
+```
+
+Image binaries are **not** stored in PostgreSQL. Only `image_path` (storage reference) is stored.
+
+Credentials are supplied via environment variables only. See [`.env.example`](.env.example).
+
+---
+
+## 13. API Architecture
+
+**FastAPI** REST backend with the following endpoints:
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| POST | `/auth/register` | Public | Register user |
+| POST | `/auth/login` | Public | Get JWT token |
+| GET | `/auth/me` | Any | Current user info |
+| POST | `/api/v1/cheques/upload` | EMPLOYEE/ADMIN | Upload cheque image |
+| POST | `/api/v1/cheques/{id}/process` | EMPLOYEE/ADMIN | Run inference |
+| GET | `/api/v1/cheques/{id}` | EMPLOYEE/REVIEWER/ADMIN | Cheque detail |
+| GET | `/api/v1/cheques` | EMPLOYEE/ADMIN | List cheques |
+| PATCH | `/api/v1/cheques/{id}/correct` | REVIEWER/ADMIN | Manual correction |
+| GET | `/api/v1/analytics/summary` | ANALYST/ADMIN | Aggregate metrics |
+| GET | `/api/v1/analytics/trends` | ANALYST/ADMIN | Volume trends |
+| GET | `/api/v1/health` | Public | Liveness |
+
+Interactive API docs: `http://localhost:8000/docs`
+
+---
+
+## 14. Dashboard
+
+**Streamlit** dashboard — five pages:
+
+| Page | Purpose |
+|---|---|
+| Upload | Drag-and-drop cheque image upload + processing |
+| Results | Image, bounding boxes, extracted values, confidence, validation status |
+| History | Paginated cheque history with filters |
+| Review | REVIEW_REQUIRED queue; manual field correction by reviewers |
+| Analytics | Volume trend, confidence distribution, review rate, field accuracy |
+
+All ML logic runs in the FastAPI backend; the dashboard is a pure UI client.
+
+---
+
+## 15. Authentication
+
+**JWT** tokens via `PyJWT`. **bcrypt** password hashing via `passlib`. Plaintext passwords are never stored.
+
+| Role | Upload | Process | View | Review | Analytics | Admin |
+|---|---|---|---|---|---|---|
+| ADMIN | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| EMPLOYEE | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| REVIEWER | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ |
+| ANALYST | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
+
+**Audited actions:** LOGIN, UPLOAD_CHEQUE, PROCESS_CHEQUE, MANUAL_CORRECTION, STATUS_CHANGE.
+
+---
+
+## 16. Evaluation Metrics
+
+- **Detection:** Precision@50, Recall@50, mAP@50, mAP@50:95
+- **Recognition:** Accuracy, Macro P/R/F1, Confusion Matrix
+- **OCR:** Word Exact Match, WER, Field Presence Rate
+- **System:** Mean/Median/P95 Latency (ms), Peak RSS Memory (MB), Failure Rate
+
+---
+
+## 17. Results
+
+### Field Detection (43 test images)
+
+| Metric | Value |
+|---|---|
+| mAP@50 | **1.000** |
+| mAP@50:95 | **0.782** |
+| Mean Precision@50 | 0.983 |
+| Mean Recall@50 | 1.000 |
+
+### Handwriting Recognition (182 samples)
+
+| Metric | Value |
+|---|---|
+| Accuracy | **42.86%** |
+| Macro F1 | 0.415 |
+
+### OCR (169 samples)
+
+| Metric | Value |
+|---|---|
+| Word Exact Match | **0.2%** |
+| WER | 99.8% |
+
+### System Performance (212 runs, CPU)
+
+| Metric | Value |
+|---|---|
+| Mean latency | **692 ms** |
+| P95 latency | 1,302 ms |
+| Failure rate | **0.0%** |
+| Peak RSS | 3,374 MB |
+
+---
+
+## 18. Limitations
+
+1. **Domain gap in recognition:** MNIST-trained CNN → 42.86% accuracy on real cheque digit crops. Not production-ready without fine-tuning on real data.
+2. **Tesseract on handwritten text:** WER > 99% on handwritten fields. Requires a dedicated handwriting OCR model.
+3. **Synthetic detector training:** Detector validated only on synthetic images; real-world generalisation not measured.
+4. **No sequence recognition:** Single-digit classifier only; multi-digit strings require CRNN/CTC.
+5. **English only:** No regional language support.
+6. **No GPU benchmarks:** All measurements on CPU.
+7. **Signature verification:** Presence detected only; no signature-against-reference verification.
+
+---
+
+## 19. Future Scope
+
+1. Fine-tune recogniser on annotated real cheque digit crops, or replace with TrOCR/CRNN.
+2. Replace Tesseract for handwritten fields with a sequence-to-sequence OCR model.
+3. Augment synthetic detector training set with real cheque images.
+4. Add CUDA support and GPU inference benchmarks.
+5. Multi-language script support (Devanagari, Tamil, Bengali, etc.).
+6. Siamese network signature verification against a reference.
+7. MICR line reader for cheque number, sort code, and account number.
+8. Active learning loop: surface low-confidence predictions for human annotation.
+
+---
+
+## 20. Installation
+
+### Prerequisites
+
+- Python 3.11+
+- PostgreSQL 14+
+- Tesseract 5.x
+
+```bash
+# Install Tesseract (Debian/Ubuntu)
+sudo apt install tesseract-ocr tesseract-ocr-eng
+```
+
+### Steps
+
+```bash
+git clone https://github.com/<your-org>/ChequeSense.git
+cd ChequeSense
+
+python -m venv .venv && source .venv/bin/activate
+
+pip install --upgrade pip
+pip install -r requirements.txt
+
+cp .env.example .env          # Fill in DATABASE_URL, SECRET_KEY, model paths
+
+alembic upgrade head          # Initialise database schema
+```
+
+Place model weights at `models/field_detector/best_model.pt` and `models/recognizer/best_model.pt`.
+
+---
+
+## 21. Usage
+
+### CLI
+
+```bash
+python -m src.pipeline.pipeline \
+  --image path/to/cheque.jpg \
+  --output result.json \
+  --device cpu
+```
+
+### API Server
+
+```bash
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+# Swagger docs: http://localhost:8000/docs
+```
+
+### Dashboard
+
+```bash
+streamlit run dashboard/app.py
+# UI: http://localhost:8501
+```
+
+---
+
+## 22. Docker Instructions
+
+```bash
+docker compose build
+docker compose up -d
+
+# Verify
+curl http://localhost:8000/api/v1/health
+
+# Logs
+docker compose logs -f api
+
+# Stop
+docker compose down
+```
+
+| Service | URL |
+|---|---|
+| API | http://localhost:8000 |
+| Dashboard | http://localhost:8501 |
+| API Docs | http://localhost:8000/docs |
+
+> Never commit `.env` to version control. Model binaries and dataset files are mounted as volumes, not baked into the image.
+
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full deployment guide.
+
+---
+
+## 23. Project Structure
+
+```
 ChequeSense/
-├── Dataset/                     # (Git-ignored) Raw benchmark & synthetic datasets
-│   ├── synthetic/               # 295 synthetic cheques with 6 bounding box fields
-│   ├── IDRBT/300/               # 112 authentic 300 DPI Indian banking cheque scans
-│   └── handwritten_and_cheques_dataset/ # 2,812 samples (OCR lines & Cheque VQA)
-├── data/                        # Generated data layer
-│   ├── raw/                     # (Git-ignored) On-demand extracted image cache
-│   ├── processed/               # (Git-ignored) Preprocessed image derivatives
-│   ├── annotations/             # COCO-format detection annotations
-│   ├── splits/                  # Leak-free split mappings (JSON)
-│   └── manifests/               # Machine-readable dataset manifests (JSON & CSV)
-├── docs/                        # Engineering reports & technical specifications
-│   ├── DATASET_AUDIT.md         # Full audit report & comparative dataset analysis
-│   └── PROJECT_REQUIREMENTS.md  # System requirements, pipeline specs & SLAs
-├── src/                         # Modular application source code
-│   └── data/                    # Data preparation layer
-│       ├── dataset_loader.py    # In-memory & lazy dataset loaders
-│       ├── dataset_validator.py # Integrity, corruption & leakage validation
-│       ├── image_preprocessor.py# Configurable document preprocessing engine
-│       ├── split_data.py        # Hash-based deduplication & leak-free splitter
-│       └── build_manifest.py    # Master manifest & COCO annotation builder
-├── tests/                       # Automated test suite
-│   └── test_data_layer.py       # 15 unit & integration tests
-├── notebooks/                   # Exploration & visualization
-│   └── 01_dataset_visualization.ipynb
-├── models/                      # (Git-ignored) Model weights & checkpoints
-└── artifacts/                   # (Git-ignored) Intermediate artifacts & logs
+├── api/                        # FastAPI REST backend
+│   ├── main.py
+│   ├── dependencies.py
+│   ├── schemas.py
+│   └── routes/
+│       ├── auth.py
+│       ├── cheque.py
+│       ├── analytics.py
+│       └── health.py
+├── src/                        # Core library
+│   ├── pipeline/               # End-to-end inference pipeline
+│   ├── detection/              # Faster R-CNN model & training
+│   ├── recognition/            # CNN recogniser model & training
+│   ├── ocr/                    # Tesseract OCR engine
+│   ├── validation/             # Business-rule validation
+│   ├── database/               # SQLAlchemy + PostgreSQL
+│   ├── analytics/              # Queries, metrics, trends, reports
+│   └── security/               # JWT auth + audit logging
+├── dashboard/                  # Streamlit frontend
+│   ├── app.py
+│   ├── pages/
+│   └── components/
+├── tests/                      # Pytest test suite
+├── reports/                    # Evaluation outputs
+│   ├── model_evaluation.md
+│   ├── error_analysis.md
+│   └── final_metrics.json
+├── docs/                       # Documentation
+│   ├── ARCHITECTURE.md
+│   ├── DATASET.md
+│   ├── ML_PIPELINE.md
+│   ├── DATABASE.md
+│   ├── API.md
+│   ├── SECURITY.md
+│   ├── EVALUATION.md
+│   ├── DEPLOYMENT.md
+│   ├── architecture_diagram.jpg
+│   └── workflow_diagram.jpg
+├── scripts/
+├── models/                     # Model checkpoints (gitignored)
+├── Dataset/                    # Dataset files (gitignored)
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+└── requirements.txt
 ```
 
 ---
 
-## Data Preparation & Leakage Prevention
+## License
 
-During the dataset audit, a critical flaw was identified in the raw synthetic dataset: 223 duplicate rows out of 295 total records, where 100% of validation images and 71.4% of test images overlapped with the training set. 
-
-ChequeSense resolves this through **cryptographic hash grouping**:
-1. **Deduplication by Image SHA-256:** The 72 unique cheque templates are partitioned as atomic groups, ensuring identical images never cross split boundaries.
-2. **Dedicated Evaluation Benchmark:** Real Indian cheques from **IDRBT/300** and their corresponding entity VQA ground truth (112 samples) are strictly isolated into the `evaluation` split (0% training exposure).
+Developed for academic purposes as a B.Tech CSE / Data Science final year project.  
+All datasets are either synthetically generated, publicly available (MNIST), or used under institutional research access terms (IDRBT).
 
 ---
 
-## Reproducing the Data Preparation Layer
-
-### 1. Partition Data (Leak-Free Splitter)
-Partition the datasets deterministically using cryptographic image hash grouping:
-```bash
-python3 -m src.data.split_data --base_dir Dataset --output_dir data/splits --seed 42
-```
-This produces:
-- `data/splits/synthetic_splits.json` (52 train, 10 val, 10 test unique image groups)
-- `data/splits/handwritten_splits.json` (HTR: 960 train, 107 val, 133 test; VQA: 1,198 train, 133 val, 169 test; IDRBT: 112 evaluation)
-- `data/splits/idrbt_splits.json` (112 evaluation)
-- `data/splits/combined_splits_summary.json`
-
-### 2. Generate Master Manifests & COCO Annotations
-Compile unified machine-readable JSON/CSV manifests and COCO-format detection files:
-```bash
-python3 -m src.data.build_manifest --base_dir Dataset
-```
-Outputs generated in `data/`:
-- `data/manifests/dataset_manifest.json` (3,219 total records)
-- `data/manifests/dataset_manifest.csv`
-- Split-specific manifests: `train_manifest.json`, `val_manifest.json`, `test_manifest.json`, `evaluation_manifest.json`
-- COCO detection annotations: `synthetic_coco_train.json`, `synthetic_coco_val.json`, `synthetic_coco_test.json`
-
-*(Optional)* To extract images to `data/raw/` for standard disk loaders, append `--cache_images`:
-```bash
-python3 -m src.data.build_manifest --base_dir Dataset --cache_images
-```
-
----
-
-## Image Preprocessing Pipeline
-
-Preprocessing in ChequeSense is **never applied blindly** to raw data. The original images are strictly preserved, and transformations are executed on-demand through explicit configuration (`PreprocessingConfig`):
-
-```python
-from PIL import Image
-from src.data.image_preprocessor import ImagePreprocessor, PreprocessingConfig
-
-# Configure tailored preprocessing for document OCR / detection
-config = PreprocessingConfig(
-    color_mode="grayscale",          # 'rgb', 'grayscale', 'unchanged'
-    target_size=(2365, 1100),        # Scale to standard 300 DPI dimensions
-    maintain_aspect_ratio=True,      # Preserves geometry with white margin padding
-    denoise=True,                    # Bilateral filtering preserves crisp text edges
-    denoise_method="bilateral",
-    enhance_contrast=True,           # Contrast Limited Adaptive Histogram Equalization
-    contrast_method="clahe",
-    clahe_clip_limit=2.0,
-    threshold_mode="otsu",           # Optional Otsu binarization for HTR
-    deskew=True,                     # Automatic skew angle detection and correction
-    normalize=False                  # Scale to [0.0, 1.0] float array if True
-)
-
-preprocessor = ImagePreprocessor(config)
-result = preprocessor.process(image_input)
-
-# Access outputs
-processed_img = result.image         # Transformed PIL Image or numpy array
-scale_factors = result.scale_factors # (scale_x, scale_y) for bounding box remapping
-padding = result.padding             # (pad_left, pad_top, pad_right, pad_bottom)
-skew_angle = result.skew_angle       # Estimated skew in degrees
-```
-
-### Bounding Box Transformation
-When resizing or padding images with bounding box annotations, remap bounding boxes with:
-```python
-adjusted_bbox = ImagePreprocessor.transform_bounding_box(
-    original_bbox, result.scale_factors, result.padding
-)
-```
-
----
-
-## Cheque Field Detection (Phase 2)
-
-ChequeSense implements a specialized **Faster R-CNN with MobileNetV3-Large FPN** architecture for localizing the 6 core cheque fields without hallucinating unannotated regions:
-- `date`: 8-digit date grid box (`DDMMYYYY`)
-- `amount`: Numerical courtesy amount box prefixed with ₹
-- `ifsc`: Branch IFSC and bank routing block
-- `acno`: Printed account number band
-- `sign`: Authorized signatory area
-- `name`: Payee recipient horizontal line
-
-### 1. Training the Detector
-Train the field detector on the leak-free deduplicated synthetic training split:
-```bash
-python3 -m src.detection.train --epochs 10 --batch_size 4 --lr 0.0005
-```
-Checkpoints are automatically saved to `models/field_detector/best_model.pt` when validation mAP@50 improves.
-
-### 2. Evaluating Model Performance
-Evaluate precision, recall, mAP@50, and mAP@[50:95] on the held-out test split:
-```bash
-python3 -m src.detection.evaluate --manifest_path data/manifests/test_manifest.json
-```
-**Held-Out Test Set Metrics:**
-- **mAP@50:** **1.0000** (100.0%)
-- **mAP@50-95:** **0.7819**
-- **Mean Precision@50:** **0.9826**
-- **Mean Recall@50:** **1.0000**
-- **Mean F1 Score@50:** **0.9908**
-
-### 3. Running Field Detection Inference
-Run inference on any cheque image to extract original-resolution bounding boxes:
-```python
-from src.detection.inference import FieldDetector
-
-detector = FieldDetector(model_path="models/field_detector/best_model.pt")
-prediction = detector.predict("Dataset/IDRBT/300/Cheque 083654.tif")
-
-print("Detected cheque fields:")
-for field_name, box in prediction.fields.items():
-    print(f"  {field_name}: conf={box.confidence:.2f}, coords=({box.xmin}, {box.ymin}, {box.xmax}, {box.ymax})")
-```
-
-### 4. Visualizing Predicted Bounding Boxes
-Render and save color-coded bounding boxes on sample cheques:
-```bash
-python3 -m src.detection.visualize --image_path "Dataset/IDRBT/300/Cheque 083654.tif" --output_path "artifacts/field_detection/sample_prediction.png"
-```
-
----
-
-## Verification & Automated Tests
-
-Execute the complete test suite (22 unit & integration tests covering data loading, corruption detection, preprocessing, splitting, manifest compilation, IoU/mAP metrics, and detector inference):
-
-```bash
-python3 -m pytest tests/ -v
-```
-
----
-
-## Dataset Exploration
-
-To interactively visualize sample cheques, bounding boxes, handwritten text lines, and image preprocessing steps, launch Jupyter and open:
-```bash
-jupyter notebook notebooks/01_dataset_visualization.ipynb
-```
-
+*ChequeSense — AI-powered cheque field extraction with confidence-based human-in-the-loop review.*

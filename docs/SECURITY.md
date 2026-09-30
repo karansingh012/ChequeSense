@@ -1,180 +1,223 @@
-# ChequeSense Security Architecture & Role-Based Access Control (RBAC)
+# ChequeSense — Security Documentation
 
-## 1. Executive Summary
+## Overview
 
-ChequeSense is an enterprise AI-powered cheque processing and verification system designed for automated clearinghouse (CTS/NACH) operations. Financial transactions and negotiable instruments require strict adherence to the **Principle of Least Privilege (PoLP)**, zero-trust perimeter enforcement, immutable compliance audit trails, and cryptographic data protection.
+ChequeSense implements defence-in-depth security appropriate for an internal banking tool. This document describes the authentication mechanism, authorisation model, audit logging, credential management, and security constraints.
 
-This document details the security model, cryptographic password hashing, JSON Web Token (JWT) lifecycle, Role-Based Access Control (RBAC) matrix, and audit logging standards implemented in the system.
+> **Note:** This system is designed as a back-office tool, not a public-facing banking portal. Production deployment behind an internal firewall, VPN, or private network is strongly recommended.
 
 ---
 
-## 2. Authentication Architecture
+## Authentication
 
-### 2.1 Password Security & Bcrypt Hashing
-ChequeSense **never stores plaintext passwords**. All user credentials submitted during registration are salted and hashed using **bcrypt** with an adaptive cost factor (work factor) of 12 rounds:
+### Mechanism: JWT (JSON Web Tokens)
 
-- **Salt Generation**: Cryptographically secure pseudo-random salt generated via `bcrypt.gensalt(rounds=12)`.
-- **Pre-image & Rainbow Table Resistance**: Unique 128-bit salt prevents pre-computation and dictionary attacks.
-- **Timing Attack Resistance**: Constant-time comparison via `bcrypt.checkpw()`.
-- **Legacy Migration Support**: The authentication layer transparently supports backward-compatible verification for existing test fixtures while enforcing bcrypt for all new and updated user credentials.
+ChequeSense uses stateless JWT-based authentication implemented with `PyJWT`.
+
+- Token type: Bearer
+- Signing algorithm: HS256 (HMAC-SHA256)
+- Secret key: Loaded from `SECRET_KEY` environment variable (minimum 32 characters)
+- Token expiry: Configurable via `ACCESS_TOKEN_EXPIRE_MINUTES` (default: 60 minutes)
+- Tokens are never stored server-side (fully stateless)
+
+### Token Lifecycle
+
+```
+[User] POST /auth/login (username + password)
+    │
+    ▼
+[Server] Verify username exists in DB
+         Verify bcrypt hash matches stored hash
+         Issue JWT signed with SECRET_KEY
+    │
+    ▼
+[User] Receives: { "access_token": "eyJ...", "token_type": "bearer" }
+
+[User] Subsequent requests:
+    Authorization: Bearer eyJ...
+    │
+    ▼
+[Server] Decode + verify JWT signature
+         Check expiry
+         Load user from DB
+         Check role permissions
+```
+
+### Token Claims
+
+| Claim | Value |
+|---|---|
+| `sub` | Username |
+| `role` | User role string |
+| `exp` | Expiry timestamp |
+| `iat` | Issued-at timestamp |
+
+---
+
+## Password Security
+
+- **Algorithm:** bcrypt via `passlib[bcrypt]`
+- **Work factor:** Default bcrypt cost (12 rounds)
+- **Storage:** Only the bcrypt hash is stored in the `users.hashed_password` column
+- **Plaintext:** Plaintext passwords are never stored, logged, or returned in any API response
+- **Validation:** Minimum password length enforced at registration
 
 ```python
-# src/security/auth.py
-def hash_password(plain_password: str) -> str:
-    salt = bcrypt.gensalt(rounds=12)
-    return bcrypt.hashpw(plain_password.encode("utf-8"), salt).decode("utf-8")
+from passlib.context import CryptContext
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    if hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$"):
-        return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
-    # Fallback for legacy SHA-256 fixture hashes
-    if len(hashed_password) == 64:
-        return hashlib.sha256(plain_password.encode("utf-8")).hexdigest() == hashed_password
-    return False
-```
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-### 2.2 JWT-Based Stateless Authentication
-Session management is handled through signed **JSON Web Tokens (JWT)** compliant with RFC 7519:
+# On registration
+hashed = pwd_context.hash(plaintext_password)
 
-- **Signature Algorithm**: HMAC-SHA256 (`HS256`).
-- **Secret Key**: Injected at runtime via the `JWT_SECRET_KEY` environment variable (minimum 256-bit entropy).
-- **Expiration Policy**: Configurable via `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (defaults to 1440 minutes / 24 hours).
-- **Token Claims**:
-  - `sub`: Username subject identifier.
-  - `user_id`: Database primary key ID.
-  - `role`: Assigned banking operational role.
-  - `iat`: Timestamp of issuance (epoch seconds).
-  - `exp`: Timestamp of token expiration (epoch seconds).
-
-```json
-{
-  "sub": "sarah_reviewer",
-  "user_id": 14,
-  "role": "REVIEWER",
-  "iat": 1759276800,
-  "exp": 1759363200
-}
+# On login
+is_valid = pwd_context.verify(plaintext_password, stored_hash)
 ```
 
 ---
 
-## 3. Role-Based Access Control (RBAC)
+## Role-Based Access Control (RBAC)
 
-### 3.1 Operational Banking Roles
+### Roles
 
-ChequeSense partitions system capabilities across four specialized operational roles:
+| Role | Description |
+|---|---|
+| `ADMIN` | Full access to all system functions including user management |
+| `EMPLOYEE` | Upload and process cheques; view own results |
+| `REVIEWER` | Access the review queue; submit manual corrections |
+| `ANALYST` | Access analytics and summary reports |
 
-| Role | Operational Scope | Description |
-| :--- | :--- | :--- |
-| **`ADMIN`** | System Administration & Governance | Complete administrative authority. Manages user provisioning, configures system thresholds, reviews queues, and accesses all system endpoints. |
-| **`EMPLOYEE`** | Front-Office Teller / Ingestion | Ingests branch or batch cheque images, triggers inference processing pipelines, and views standard processing outputs. |
-| **`REVIEWER`** | Back-Office Compliance & Verification | Specializes in the human review queue. Inspects low-confidence or validation-flagged cheques, performs manual corrections, and updates ledger statuses. |
-| **`ANALYST`** | Operations Analytics & MIS | Accesses business intelligence dashboards, clearing volume statistics, trend distributions, latency metrics, and executive reporting. |
+### Permissions Matrix
 
-### 3.2 Granular Permissions Matrix
+| Endpoint | ADMIN | EMPLOYEE | REVIEWER | ANALYST |
+|---|---|---|---|---|
+| `POST /auth/register` | ✓ | ✓ | ✓ | ✓ |
+| `POST /auth/login` | ✓ | ✓ | ✓ | ✓ |
+| `GET /auth/me` | ✓ | ✓ | ✓ | ✓ |
+| `POST /cheques/upload` | ✓ | ✓ | ✗ | ✗ |
+| `POST /cheques/{id}/process` | ✓ | ✓ | ✗ | ✗ |
+| `GET /cheques/{id}` | ✓ | ✓ | ✓ | ✗ |
+| `GET /cheques` | ✓ | ✓ | ✗ | ✗ |
+| `PATCH /cheques/{id}/correct` | ✓ | ✗ | ✓ | ✗ |
+| `GET /analytics/summary` | ✓ | ✗ | ✗ | ✓ |
+| `GET /analytics/trends` | ✓ | ✗ | ✗ | ✓ |
+| `GET /health` | ✓ | ✓ | ✓ | ✓ |
 
-| Permission | Description | `ADMIN` | `EMPLOYEE` | `REVIEWER` | `ANALYST` |
-| :--- | :--- | :---: | :---: | :---: | :---: |
-| `manage_users` | Provision, suspend, or update banking user accounts | ✅ | ❌ | ❌ | ❌ |
-| `upload_cheques` | Ingest cheque image files into the staging storage | ✅ | ✅ | ❌ | ❌ |
-| `process_cheques` | Execute field detection, digit recognition, and OCR pipelines | ✅ | ✅ | ❌ | ❌ |
-| `view_results` | Query cheque records, extracted fields, and processing runs | ✅ | ✅ | ✅ | ✅ |
-| `review_queue` | Access cheques gated for manual human teller inspection | ✅ | ❌ | ✅ | ❌ |
-| `correct_values` | Apply manual overrides to extracted field values & verify cheques | ✅ | ❌ | ✅ | ❌ |
-| `access_analytics`| Query executive dashboards, volume, and monetary trends | ✅ | ❌ | ❌ | ✅ |
+### Implementation
 
-### 3.3 Endpoint Authorization Mapping
+Role checks are enforced via FastAPI dependencies:
 
-| HTTP Method | Route | Required Role(s) | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/auth/register` | Public (or `ADMIN`) | Creates new user account with bcrypt password |
-| `POST` | `/auth/login` | Public | Authenticates credentials, issues JWT token, logs `LOGIN` |
-| `GET` | `/auth/me` | Authenticated (Any) | Returns current user profile and resolved permissions |
-| `POST` | `/api/v1/cheques/upload` | `EMPLOYEE`, `ADMIN` | Ingests cheque image, validates format/size, logs `UPLOAD_CHEQUE` |
-| `POST` | `/api/v1/cheques/{id}/process` | `EMPLOYEE`, `ADMIN` | Runs ML inference pipeline, logs `PROCESS_CHEQUE`, `STATUS_CHANGE` |
-| `GET` | `/api/v1/cheques/{id}` | Authenticated (Any) | Retrieves cheque details, extracted fields, validation gates |
-| `GET` | `/api/v1/cheques` | Authenticated (Any) | Lists paginated cheques with status & review filtering |
-| `POST` | `/api/v1/cheques/{id}/review` | `REVIEWER`, `ADMIN` | Corrects field values, resolves review, logs `MANUAL_CORRECTION` |
-| `GET` | `/api/v1/analytics/summary` | `ANALYST`, `ADMIN` | Returns clearing volume, confidence, and latency summary |
-| `GET` | `/api/v1/analytics/trends` | `ANALYST`, `ADMIN` | Returns time-series volume and monetary clearing trends |
-| `GET` | `/api/v1/health` | Public | System liveness, database, and pipeline status |
+```python
+def require_roles(*roles: UserRole):
+    def dependency(current_user: User = Depends(get_current_user)):
+        if current_user.role not in [r.value for r in roles]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return current_user
+    return dependency
 
----
-
-## 4. Audit Logging Architecture
-
-Banking regulations (e.g., PCI-DSS, RBI Information Security Guidelines, SOX) mandate an immutable, time-stamped audit trail for all security-sensitive actions and operational modifications.
-
-### 4.1 Tracked Audit Events
-
-1. **`LOGIN`**: Authenticated user session initiation with IP tracking and timestamp.
-2. **`UPLOAD_CHEQUE`**: Physical image ingestion with SHA-256 cryptographic digest, file size, and filename.
-3. **`PROCESS_CHEQUE`**: Machine learning pipeline execution pass, model latencies, and gating decisions.
-4. **`MANUAL_CORRECTION`**: Human teller intervention updating extracted field values (record before/after).
-5. **`STATUS_CHANGE`**: Transitions across lifecycle states (`PROCESSED` → `VERIFIED`, `REVIEW_REQUIRED`, `INVALID`).
-
-### 4.2 Database Schema: `audit_logs`
-
-```sql
-CREATE TABLE audit_logs (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    username VARCHAR(64) NOT NULL,
-    action VARCHAR(64) NOT NULL,
-    resource_type VARCHAR(64) NOT NULL,
-    resource_id VARCHAR(128),
-    details_json JSONB,
-    ip_address VARCHAR(45)
-);
-
-CREATE INDEX idx_audit_logs_action_timestamp ON audit_logs (action, timestamp);
-CREATE INDEX ix_audit_logs_username ON audit_logs (username);
-```
-
-### 4.3 SIEM Integration
-In addition to relational storage, every audit event is emitted as a structured, log-forwarding friendly string designed for ingestion by Security Information and Event Management (SIEM) systems (e.g., Splunk, Datadog, ELK, AWS CloudWatch):
-
-```
-2026-10-01 02:00:35,120 [INFO] chequesense.audit: AUDIT_EVENT: action=MANUAL_CORRECTION user=auditor_rev resource=cheque/12 ip=127.0.0.1 details={"corrections": {"amount": "54000.00"}, "resolution_note": "Signature verified with mandate"}
+# Usage in route
+@router.post("/cheques/upload")
+def upload(
+    ...,
+    current_user: User = Depends(require_roles(UserRole.EMPLOYEE, UserRole.ADMIN))
+):
 ```
 
 ---
 
-## 5. Defense-in-Depth & System Hardening
+## Audit Logging
 
-1. **Denial of Service (DoS) Prevention on Uploads**:
-   - Strict 15 MB payload ceiling (`HTTP 413 Payload Too Large`).
-   - Allowed file MIME types (`image/png`, `image/jpeg`, `image/tiff`, `image/webp`).
-   - In-memory PIL header verification (`img.verify()`) to prevent image decompression bombs and corrupted file parsing.
-2. **Path Traversal Protection**:
-   - Client filenames are never used directly on disk.
-   - Files are stored using cryptographic hashes and UUIDs: `{uuid}_{hash[:16]}.{ext}`.
-3. **Deduplication by Cryptographic Digest**:
-   - SHA-256 hashes detect re-uploads of identical cheques and prevent duplicate clearing transactions.
-4. **Environment Secrets Isolation**:
-   - Secrets are loaded exclusively from system environment variables (`JWT_SECRET_KEY`, `POSTGRES_PASSWORD`).
-   - `.env` files are strictly excluded from source control via `.gitignore`.
-   - `.env.example` provides template variables without exposing credentials.
+Every significant action is recorded in the `audit_logs` table with the following information:
+
+| Column | Description |
+|---|---|
+| `timestamp` | UTC timestamp of the action |
+| `user_id` | FK to `users` table (nullable for system actions) |
+| `username` | Denormalised for immutability even if user is deleted |
+| `action` | Action type (see below) |
+| `resource_type` | `cheque`, `user`, `validation_result`, `auth` |
+| `resource_id` | ID of the affected resource |
+| `details_json` | Action-specific structured metadata |
+| `ip_address` | Client IP address (IPv4 or IPv6) |
+
+### Audited Action Types
+
+| Action | Trigger |
+|---|---|
+| `LOGIN` | Successful login |
+| `LOGIN_FAILED` | Failed login attempt |
+| `USER_REGISTERED` | New user registration |
+| `UPLOAD_CHEQUE` | Cheque image uploaded |
+| `PROCESS_CHEQUE` | Pipeline run initiated |
+| `MANUAL_CORRECTION` | Reviewer corrects a field |
+| `STATUS_CHANGE` | Cheque status updated |
+
+### Immutability
+
+Audit log rows are never updated or deleted by the application. The `AuditLog` model has no `UPDATE` or `DELETE` ORM operations. In production, consider applying PostgreSQL row-level security to prevent audit log tampering.
 
 ---
 
-## 6. Verification and Testing
+## Credential Management
 
-Automated security and authorization tests are maintained under [`tests/test_auth_layer.py`](file:///Users/karansingh/ChequeSense/tests/test_auth_layer.py):
+### Rules
+
+1. **No plaintext secrets in code:** All secrets are environment variables.
+2. **No secrets in Docker images:** `.env` is excluded by `.dockerignore`.
+3. **No secrets in git history:** `.env` is listed in `.gitignore`.
+4. **Template provided:** `.env.example` contains all required variable names with placeholder values.
+
+### Required Environment Variables
+
+| Variable | Description | Example |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@db:5432/chequesense` |
+| `SECRET_KEY` | JWT signing key | 64-char random string |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token TTL | `60` |
+
+### Generating a Secure Secret Key
 
 ```bash
-# Execute security and authentication test suite
-python -m pytest tests/test_auth_layer.py -v
-
-# Execute entire test suite
-python -m pytest
+python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### Test Coverage Highlights:
-- **`test_password_hashing_bcrypt`**: Verifies bcrypt salting, round count, and rejection of invalid passwords.
-- **`test_jwt_lifecycle_and_claims`**: Validates signature generation, expiration enforcement, and tampered token detection.
-- **`test_rbac_roles_and_permissions`**: Validates the permission matrix across all 4 roles.
-- **`test_auth_register_and_login_flow`**: Validates `/auth/register`, `/auth/login`, duplicate checks, and `/auth/me`.
-- **`test_rbac_endpoint_isolation_matrix`**: Tests that unauthorized roles receive `HTTP 403 Forbidden` and unauthenticated calls receive `HTTP 401 Unauthorized` across upload, process, review, and analytics endpoints.
-- **`test_audit_logging_actions`**: Confirms database records for `LOGIN`, `UPLOAD_CHEQUE`, `PROCESS_CHEQUE`, `MANUAL_CORRECTION`, and `STATUS_CHANGE`.
+---
+
+## File Upload Security
+
+| Control | Implementation |
+|---|---|
+| MIME type validation | Only `image/jpeg`, `image/png`, `image/tiff` accepted |
+| File size limit | 10 MB maximum (configurable) |
+| Filename sanitisation | UUID v4 + extension; original filename discarded |
+| Content validation | PIL `Image.verify()` called on every upload |
+| Storage | Files stored outside web root in `UPLOAD_DIR` |
+| Deduplication | SHA-256 hash prevents duplicate processing |
+
+---
+
+## Known Limitations and Recommendations for Production
+
+1. **No refresh tokens:** The current implementation uses single-use access tokens. Implement refresh tokens for production.
+2. **No account lockout:** Failed login attempts are logged but not rate-limited. Add login rate limiting (e.g., via a reverse proxy or Redis-backed rate limiter).
+3. **No HTTPS enforcement:** HTTPS must be configured at the reverse proxy (nginx/Traefik) layer.
+4. **Self-registration:** Any user can register with any role. In production, restrict registration to admins or implement an invite-based flow.
+5. **No secret rotation:** Implement `SECRET_KEY` rotation with a token invalidation mechanism for production.
+6. **Audit log write-once enforcement:** Consider PostgreSQL RLS or a dedicated audit log service.
+
+---
+
+## Security Summary
+
+| Control | Status |
+|---|---|
+| Password hashing (bcrypt) | ✓ Implemented |
+| JWT authentication | ✓ Implemented |
+| Role-based access control | ✓ Implemented |
+| Audit logging | ✓ Implemented |
+| File upload validation | ✓ Implemented |
+| No secrets in codebase | ✓ Enforced via .gitignore / .dockerignore |
+| HTTPS | ✗ Configured at reverse proxy layer (not in app) |
+| Account lockout / rate limiting | ✗ Not implemented |
+| Refresh tokens | ✗ Not implemented |
+| Signature verification | ✗ Field presence only |

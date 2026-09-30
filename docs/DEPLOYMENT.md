@@ -1,223 +1,255 @@
-# ChequeSense Enterprise Deployment & Containerization Guide
+# ChequeSense — Deployment Guide
 
-**Version:** 1.0.0  
-**Target Environment:** Docker & Docker Compose (Production / On-Premise / Cloud VM)  
-**Supported Platforms:** Linux (x86_64, aarch64), macOS (Apple Silicon via Docker Desktop)  
+## Overview
 
----
+ChequeSense is containerised using Docker and Docker Compose. The stack consists of three services:
 
-## 1. Architectural Overview
-
-ChequeSense is containerized into a microservice architecture orchestrated via Docker Compose:
-
-```mermaid
-graph TD
-    User([Bank Teller / Analyst]) -->|Browser Port 8501| Dash[Streamlit Dashboard]
-    Client([Core Banking System / Mobile]) -->|REST API Port 8000| API[FastAPI Inference Backend]
-    
-    Dash -->|HTTP REST + Bearer Token| API
-    Dash -.->|Service Fallback| DB[(PostgreSQL 15)]
-    API -->|Read/Write ORM| DB
-    
-    subgraph Host Storage
-        V1[(postgres_data Volume)]
-        V2[(cheque_uploads Volume)]
-        M1[./models Directory :ro]
-    end
-    
-    DB --> V1
-    API --> V2
-    Dash --> V2
-    API --> M1
-    Dash --> M1
-```
-
-### Services Summary
-
-| Service Name | Container Name | Base Image | Internal Port | External Port | Healthcheck Endpoint |
-| :--- | :--- | :--- | :---: | :---: | :--- |
-| **`postgres`** | `chequesense-postgres` | `postgres:15-alpine` | `5432` | `5432` | `pg_isready -U postgres -d chequesense` |
-| **`api`** | `chequesense-api` | `chequesense:latest` | `8000` | `8000` | `GET /api/v1/health` |
-| **`dashboard`** | `chequesense-dashboard`| `chequesense:latest` | `8501` | `8501` | `GET /_stcore/health` |
+| Service | Image | Port |
+|---|---|---|
+| `db` | `postgres:15-alpine` | 5432 (internal) |
+| `api` | Custom (Python 3.11-slim) | 8000 |
+| `dashboard` | Custom (same image) | 8501 |
 
 ---
 
-## 2. Prerequisites & Resource Allocation
+## Prerequisites
 
-- **Docker Engine:** Version 24.0+ (or Docker Desktop 4.20+)
-- **Docker Compose:** Version 2.20+ (included in standard Docker CLI)
-- **Minimum System Requirements:**
-  - **CPU:** 2 vCPUs (4 vCPUs recommended for concurrent batch processing)
-  - **RAM:** 4 GB available memory (8 GB recommended for simultaneous Faster R-CNN + Tesseract inference)
-  - **Disk Space:** 5 GB free disk space (models + base dependencies)
+- **Docker** 24.0+
+- **Docker Compose** v2 (`docker compose`, not `docker-compose`)
+- **Git**
+- **Model weights** at `models/field_detector/best_model.pt` and `models/recognizer/best_model.pt`
 
 ---
 
-## 3. Environment Variable Configuration
+## Quick Start
 
-All services are configured through environment variables. An example template is provided in [`.env.example`](file:///Users/karansingh/ChequeSense/.env.example).
+### 1. Clone and configure
 
-To customize your deployment credentials:
 ```bash
+git clone https://github.com/<your-org>/ChequeSense.git
+cd ChequeSense
+
 cp .env.example .env
-chmod 600 .env
 ```
 
-### Key Configuration Parameters
+Edit `.env` and fill in all required values (see [Environment Variables](#environment-variables) below).
 
-| Variable Name | Default Value | Description |
-| :--- | :--- | :--- |
-| `POSTGRES_USER` | `postgres` | PostgreSQL administrative username |
-| `POSTGRES_PASSWORD` | `postgres` | Secure database user password |
-| `POSTGRES_DB` | `chequesense` | Database schema name |
-| `POSTGRES_PORT` | `5432` | Host port mapped to PostgreSQL |
-| `JWT_SECRET_KEY` | `09d25e...` | Secret key for signing HS256 auth tokens |
-| `DEFAULT_ADMIN_USER` | `admin` | Default administrative account username |
-| `DEFAULT_ADMIN_PASSWORD` | `AdminPassword123!` | Initial administrator password |
-| `CHEQUESENSE_API_URL` | `http://api:8000/api/v1` | Internal API endpoint used by the dashboard |
-| `UPLOAD_DIR` | `/app/data/uploads` | Path to persistent cheque image storage |
-| `DETECTOR_MODEL_PATH` | `/app/models/field_detector/best_model.pt` | Path to Faster R-CNN checkpoint |
-| `RECOGNIZER_MODEL_PATH` | `/app/models/recognizer/best_model.pt` | Path to Digit Recognizer checkpoint |
-| `TESSERACT_CMD` | `/usr/bin/tesseract` | Path to Tesseract OCR engine executable |
+### 2. Place model weights
 
-> [!IMPORTANT]
-> The `.dockerignore` file explicitly excludes `.env` and all secret files from being baked into the Docker image, strictly enforcing the 12-factor application methodology.
+```bash
+mkdir -p models/field_detector models/recognizer
+# Copy your trained checkpoints:
+cp /path/to/field_detector.pt models/field_detector/best_model.pt
+cp /path/to/recognizer.pt      models/recognizer/best_model.pt
+```
 
----
+### 3. Build and start
 
-## 4. Building and Starting Services
-
-### 4.1 Build the Application Image
-Build the unified production image containing the FastAPI backend and Streamlit dashboard:
 ```bash
 docker compose build
-```
-
-*Note: The build utilizes Debian 12 (Bookworm) `python:3.11-slim`, installs CPU-optimized PyTorch wheels directly from the PyTorch index, and pre-compiles dependencies for fast, layer-cached builds.*
-
-### 4.2 Start All Services in Background Mode
-```bash
 docker compose up -d
 ```
 
-### 4.3 Verify Container Status
-Check service states and healthcheck reports:
+### 4. Verify
+
 ```bash
-docker compose ps
-```
-Expected output:
-```text
-NAME                    IMAGE               COMMAND                  SERVICE     CREATED         STATUS                   PORTS
-chequesense-api         chequesense:latest  "uvicorn api.main:ap…"   api         2 minutes ago   Up 2 minutes (healthy)   0.0.0.0:8000->8000/tcp
-chequesense-dashboard   chequesense:latest  "streamlit run dashb…"   dashboard   2 minutes ago   Up 2 minutes (healthy)   0.0.0.0:8501->8501/tcp
-chequesense-postgres    postgres:15-alpine  "docker-entrypoint.s…"   postgres    2 minutes ago   Up 2 minutes (healthy)   0.0.0.0:5432->5432/tcp
+# API health
+curl http://localhost:8000/api/v1/health
+
+# API docs
+open http://localhost:8000/docs
+
+# Dashboard
+open http://localhost:8501
 ```
 
 ---
 
-## 5. Health Verification & Operational Checks
+## Environment Variables
 
-### 5.1 Backend API Healthcheck
-Test the API diagnostic endpoint:
+Copy `.env.example` to `.env` and set all values:
+
 ```bash
-curl -s http://localhost:8000/api/v1/health | jq .
-```
-Expected response:
-```json
-{
-  "status": "healthy",
-  "version": "1.0.0",
-  "timestamp": "2026-10-01T02:25:00.000000",
-  "database": "connected",
-  "pipeline": "available"
-}
-```
+# PostgreSQL
+POSTGRES_DB=chequesense
+POSTGRES_USER=chequesense_user
+POSTGRES_PASSWORD=<strong-password>
 
-### 5.2 Streamlit Dashboard Liveness
-Test the Streamlit internal health probe:
-```bash
-curl -I http://localhost:8501/_stcore/health
-```
-Expected response: `HTTP/1.1 200 OK`
+# Application database URL (used by API and dashboard)
+DATABASE_URL=postgresql://chequesense_user:<strong-password>@db:5432/chequesense
 
-### 5.3 PostgreSQL Database Verification
-Inspect the database tables automatically generated on startup:
-```bash
-docker compose exec postgres psql -U postgres -d chequesense -c "\dt"
-```
-Expected table list:
-- `users`
-- `cheques`
-- `extracted_fields`
-- `predictions`
-- `validation_results`
-- `processing_runs`
-- `review_audit_logs`
+# JWT Authentication
+SECRET_KEY=<64-char-random-hex>
+ACCESS_TOKEN_EXPIRE_MINUTES=60
 
----
+# Initial admin credentials (seeded at startup)
+ADMIN_USERNAME=admin
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=<strong-admin-password>
 
-## 6. End-to-End Cheque Processing Test
+# Model paths (inside container)
+DETECTOR_MODEL_PATH=/app/models/field_detector/best_model.pt
+RECOGNIZER_MODEL_PATH=/app/models/recognizer/best_model.pt
+DEVICE=cpu
 
-### 6.1 Authenticate and Obtain JWT Bearer Token
-```bash
-TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "AdminPassword123!"}' \
-  | jq -r .access_token)
+# OCR
+TESSERACT_CMD=/usr/bin/tesseract
 
-echo "JWT Access Token: $TOKEN"
+# File upload
+UPLOAD_DIR=/app/data/uploads
+MAX_FILE_SIZE_MB=10
+
+# API URL for dashboard
+API_BASE_URL=http://api:8000
 ```
 
-### 6.2 Upload a Test Cheque Image
-```bash
-UPLOAD_RES=$(curl -s -X POST http://localhost:8000/api/v1/cheques/upload \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@artifacts/pipeline/test_cheques/sample_icici.png")
+### Generating a Secure `SECRET_KEY`
 
-CHEQUE_ID=$(echo $UPLOAD_RES | jq -r .id)
-echo "Uploaded Cheque ID: $CHEQUE_ID"
-```
-
-### 6.3 Trigger AI Pipeline Inference
 ```bash
-curl -s -X POST http://localhost:8000/api/v1/cheques/$CHEQUE_ID/process \
-  -H "Authorization: Bearer $TOKEN" | jq .
+python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 ---
 
-## 7. Operational Best Practices
+## Services Detail
 
-### 7.1 Model Loading Efficiency
-- PyTorch models (`best_model.pt`) are loaded once during container startup as memory singletons using `@lru_cache(maxsize=1)` in `api.dependencies.get_pipeline()`.
-- Sequential HTTP requests do not re-read weights from disk or re-instantiate convolutional layers, preserving CPU cache locality.
-- Models are mounted `:ro` (read-only) inside containers to prevent accidental corruption or modification.
+### `db` (PostgreSQL)
 
-### 7.2 Safe File Storage & Volume Management
-- Cheque uploads are stored under `/app/data/uploads` inside the named volume `cheque_uploads`.
-- Images are named via cryptographic SHA-256 hashes (`{uuid}_{hash[:16]}.png`) to eliminate path traversal vulnerabilities.
-- Data persistence survives container restarts and upgrades:
-  ```bash
-  # Check storage volume details
-  docker volume inspect chequesense_cheque_uploads
-  docker volume inspect chequesense_postgres_data
-  ```
+- Image: `postgres:15-alpine`
+- Data volume: `postgres_data` (persists across restarts)
+- Health check: `pg_isready -U $POSTGRES_USER`
+- The API service waits for the DB health check before starting
 
-### 7.3 Log Aggregation
-View real-time structured logs from all services:
+### `api` (FastAPI)
+
+- Built from `Dockerfile`
+- Runs as non-root user `appuser` (UID 1000)
+- Runs `uvicorn api.main:app --host 0.0.0.0 --port 8000`
+- On startup: runs Alembic migrations + seeds admin user
+- Health check: `curl http://localhost:8000/api/v1/health`
+- Model directory mounted read-only: `./models:/app/models:ro`
+- Upload directory mounted with write access: `uploads_data:/app/data/uploads`
+
+### `dashboard` (Streamlit)
+
+- Same Docker image as the API
+- Runs `streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0`
+- Communicates with the API service via `http://api:8000` (internal Docker network)
+- Health check: `curl http://localhost:8501/_stcore/health`
+
+---
+
+## Docker Compose Commands
+
 ```bash
-# All services
-docker compose logs -f
+# Build all service images
+docker compose build
 
-# Specific service with timestamps
-docker compose logs -f --timestamps api
-```
+# Start all services in background
+docker compose up -d
 
-### 7.4 Stopping and Cleaning Up
-```bash
-# Graceful stop
+# Start and follow logs
+docker compose up
+
+# Follow logs for a specific service
+docker compose logs -f api
+docker compose logs -f dashboard
+docker compose logs -f db
+
+# Stop services (keep volumes)
 docker compose down
 
-# Stop and wipe all persistent volumes (CAUTION: Destroys DB records)
+# Stop services and remove all data (DESTRUCTIVE)
 docker compose down -v
+
+# Restart a single service
+docker compose restart api
+
+# View running containers
+docker compose ps
+
+# Open a shell in the API container
+docker compose exec api bash
+
+# Run Alembic migrations manually
+docker compose exec api alembic upgrade head
+
+# Check database connectivity from the API container
+docker compose exec api python -c \
+  "from src.database.connection import engine; engine.connect(); print('DB OK')"
 ```
+
+---
+
+## Volumes
+
+| Volume | Purpose |
+|---|---|
+| `postgres_data` | PostgreSQL data directory (persists across `docker compose down`) |
+| `uploads_data` | Uploaded cheque images (shared between API and dashboard) |
+| `./models` (bind mount) | Read-only model weights — mounted from host, not baked into image |
+
+---
+
+## Production Recommendations
+
+1. **HTTPS:** Place an nginx or Traefik reverse proxy in front of the API and dashboard. Configure TLS termination at the proxy layer.
+
+2. **Secrets management:** For production, use Docker Secrets, HashiCorp Vault, or your cloud provider's secret manager instead of `.env` files.
+
+3. **Database backups:** Configure regular `pg_dump` backups of the `postgres_data` volume.
+
+4. **Resource limits:** Add `deploy.resources.limits` in `docker-compose.yml` to cap CPU and memory per service (especially for the API, which loads PyTorch).
+
+5. **GPU acceleration:** If a CUDA-capable GPU is available, change `DEVICE=cuda` and use the `pytorch/pytorch:latest` CUDA base image. Update `torch` installation in the Dockerfile accordingly.
+
+6. **Model storage:** In production, store model weights in object storage (AWS S3, GCS) and download them at container startup rather than mounting from the host.
+
+7. **Log aggregation:** Configure Docker logging drivers to forward logs to a centralised logging system (Elasticsearch, CloudWatch, etc.).
+
+---
+
+## Troubleshooting
+
+### API fails to start with "could not connect to server"
+
+The database may not be ready. Wait 10–20 seconds and retry, or inspect the DB logs:
+
+```bash
+docker compose logs db
+```
+
+### API returns 500 on `/process` — "model file not found"
+
+Check that the model weights are correctly mounted:
+
+```bash
+docker compose exec api ls /app/models/field_detector/
+docker compose exec api ls /app/models/recognizer/
+```
+
+### Dashboard shows "Connection refused"
+
+Ensure the API container is running and healthy before the dashboard tries to connect:
+
+```bash
+docker compose ps
+docker compose logs api
+```
+
+### Database schema is out of date
+
+Run migrations manually:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+---
+
+## Security Notes
+
+- Never commit `.env` to version control (listed in `.gitignore` and `.dockerignore`).
+- Dataset files are excluded from the Docker image via `.dockerignore`.
+- Model weights should not contain training data or PII.
+- The Docker image runs as a non-root user (`appuser`, UID 1000).
