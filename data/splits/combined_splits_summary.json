@@ -1,0 +1,32 @@
+{
+  "seed": 42,
+  "synthetic": {
+    "train": 205,
+    "val": 47,
+    "test": 43
+  },
+  "synthetic_unique_images": {
+    "train": 52,
+    "val": 10,
+    "test": 10
+  },
+  "handwritten_and_cheques": {
+    "handwritten_ocr": {
+      "train": 960,
+      "val": 107,
+      "test": 133
+    },
+    "cheque_vqa": {
+      "train": 1198,
+      "val": 133,
+      "test": 169
+    },
+    "idrbt_entity_vqa": {
+      "evaluation": 112
+    }
+  },
+  "idrbt_300": {
+    "evaluation": 112
+  },
+  "total_samples": 3219
+}
