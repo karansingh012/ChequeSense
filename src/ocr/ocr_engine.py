@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import shutil
 import subprocess
 import tempfile
@@ -112,7 +113,12 @@ class OCREngine:
         self.language = language
         self.default_psm = default_psm
         self.preprocessor = OCRPreprocessor()
-        self.tesseract_cmd = tesseract_cmd or shutil.which("tesseract") or "/opt/homebrew/bin/tesseract"
+        self.tesseract_cmd = (
+            tesseract_cmd
+            or os.getenv("TESSERACT_CMD")
+            or shutil.which("tesseract")
+            or "/opt/homebrew/bin/tesseract"
+        )
 
         if not Path(self.tesseract_cmd).exists() and not shutil.which(self.tesseract_cmd):
             raise RuntimeError(

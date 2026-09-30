@@ -40,11 +40,27 @@ def api_test_client():
     def override_get_upload_dir():
         return temp_upload_path
 
+    from api.dependencies import get_current_user
+    from src.database.models import User
+
+
+    def override_get_current_user():
+        return User(
+            id=1,
+            username="admin_operator",
+            email="admin@bank.com",
+            role="ADMIN",
+            is_active=True,
+            hashed_password="hashed_secret",
+        )
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_upload_dir] = override_get_upload_dir
+    app.dependency_overrides[get_current_user] = override_get_current_user
 
     with TestClient(app) as client:
         yield client, TestingSessionLocal
+
 
     app.dependency_overrides.clear()
     temp_dir.cleanup()

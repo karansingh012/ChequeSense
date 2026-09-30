@@ -34,10 +34,15 @@ logger = logging.getLogger("chequesense.database.crud")
 # User CRUD
 # ------------------------------------------------------------------------------
 
-def create_user(db: Session, user_in: UserCreate) -> User:
+def create_user(db: Session, user_in: UserCreate, use_bcrypt: bool = False) -> User:
     """Creates a new user record with hashed password."""
-    # Simple SHA-256 for basic authentication demonstration
-    hashed = hashlib.sha256(user_in.password.encode("utf-8")).hexdigest()
+    if use_bcrypt:
+        from src.security.auth import hash_password
+        hashed = hash_password(user_in.password)
+    else:
+        # Backward-compatible SHA-256 for basic test fixtures
+        hashed = hashlib.sha256(user_in.password.encode("utf-8")).hexdigest()
+
     user = User(
         username=user_in.username,
         email=user_in.email,
@@ -49,6 +54,7 @@ def create_user(db: Session, user_in: UserCreate) -> User:
     db.commit()
     db.refresh(user)
     return user
+
 
 
 def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
@@ -304,9 +310,70 @@ def update_review_resolution(
     return record
 
 
+def correct_cheque_fields(
+    db: Session,
+    cheque_id: int,
+    field_corrections: Dict[str, str],
+    new_status: Optional[str] = "VERIFIED",
+    resolution_note: Optional[str] = None,
+    reviewed_by_user_id: Optional[int] = None,
+) -> Optional[Cheque]:
+    """Applies manual human corrections to extracted fields and updates cheque status."""
+    cheque = get_cheque_by_id(db, cheque_id, include_relations=True)
+    if not cheque:
+        return None
+
+    # Update matching extracted fields or insert missing ones
+    for fname, new_val in field_corrections.items():
+        matched = False
+        for ef in cheque.extracted_fields:
+            if ef.field_name == fname:
+                ef.raw_value = str(new_val)
+                ef.normalized_value = str(new_val)
+                ef.confidence = 1.0  # Teller verified
+                ef.confidence_tier = "HIGH"
+                ef.extraction_method = "manual_correction"
+                matched = True
+        if not matched:
+            run_id = cheque.processing_runs[0].id if cheque.processing_runs else 1
+            new_ef = ExtractedField(
+                cheque_id=cheque.id,
+                processing_run_id=run_id,
+                field_name=fname,
+                raw_value=str(new_val),
+                normalized_value=str(new_val),
+                confidence=1.0,
+                detection_confidence=1.0,
+                extraction_confidence=1.0,
+                extraction_method="manual_correction",
+                confidence_tier="HIGH",
+            )
+            db.add(new_ef)
+
+    # Update validation result resolutions
+    for vr in cheque.validation_results:
+        vr.reviewed_by_user_id = reviewed_by_user_id
+        vr.review_resolution = resolution_note or "MANUALLY_CORRECTED"
+        vr.reviewed_at = datetime.datetime.utcnow()
+        if new_status == "VERIFIED":
+            vr.is_valid = True
+            vr.validation_status = "VALID"
+
+    if new_status:
+        cheque.status = new_status
+        if new_status == "VERIFIED":
+            cheque.review_required = False
+
+    cheque.updated_at = datetime.datetime.utcnow()
+    db.commit()
+    db.refresh(cheque)
+    return cheque
+
+
 # ------------------------------------------------------------------------------
 # Integrated Atomic Pipeline Ingestion
 # ------------------------------------------------------------------------------
+
 
 def save_pipeline_execution(
     db: Session,

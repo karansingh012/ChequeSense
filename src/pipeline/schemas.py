@@ -58,15 +58,29 @@ class ChequePipelineResult(BaseModel):
     diagnostics: Optional[PipelineDiagnostics] = Field(default=None, description="Audit telemetry")
 
 
+import os
+
+
 class PipelineConfig(BaseModel):
     """Configuration settings and model checkpoint paths for the pipeline."""
 
-    detector_model_path: str = "models/field_detector/best_model.pt"
-    recognizer_model_path: str = "models/recognizer/best_model.pt"
-    tesseract_cmd: Optional[str] = None
-    tesseract_language: str = "eng"
-    device: str = "cpu"
+    detector_model_path: str = Field(
+        default_factory=lambda: os.getenv("DETECTOR_MODEL_PATH", "models/field_detector/best_model.pt")
+    )
+    recognizer_model_path: str = Field(
+        default_factory=lambda: os.getenv("RECOGNIZER_MODEL_PATH", "models/recognizer/best_model.pt")
+    )
+    tesseract_cmd: Optional[str] = Field(
+        default_factory=lambda: os.getenv("TESSERACT_CMD")
+    )
+    tesseract_language: str = Field(
+        default_factory=lambda: os.getenv("TESSERACT_LANGUAGE", "eng")
+    )
+    device: str = Field(
+        default_factory=lambda: os.getenv("DEVICE", "cpu")
+    )
     detection_threshold: float = 0.50
     high_confidence_threshold: float = 0.80
     low_confidence_threshold: float = 0.60
     enable_clahe: bool = True
+

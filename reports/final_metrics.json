@@ -1,0 +1,481 @@
+{
+  "timestamp": "2026-09-30T20:45:47Z",
+  "test_dataset_sizes": {
+    "synthetic_detection_test_samples": 43,
+    "handwritten_recognition_test_samples": 182,
+    "pipeline_and_system_test_samples": 212
+  },
+  "field_detection": {
+    "total_images": 43,
+    "total_ground_truths": 258,
+    "total_predictions": 263,
+    "mean_precision_50": 0.9826,
+    "mean_recall_50": 1.0,
+    "mean_f1_50": 0.9908,
+    "map_50": 1.0,
+    "map_50_95": 0.7819,
+    "per_class": {
+      "date": {
+        "class_name": "date",
+        "class_id": 1,
+        "gt_count": 43,
+        "pred_count": 43,
+        "precision_50": 1.0,
+        "recall_50": 1.0,
+        "f1_50": 1.0,
+        "ap_50": 1.0,
+        "ap_50_95": 0.8602
+      },
+      "amount": {
+        "class_name": "amount",
+        "class_id": 2,
+        "gt_count": 43,
+        "pred_count": 43,
+        "precision_50": 1.0,
+        "recall_50": 1.0,
+        "f1_50": 1.0,
+        "ap_50": 1.0,
+        "ap_50_95": 0.8063
+      },
+      "ifsc": {
+        "class_name": "ifsc",
+        "class_id": 3,
+        "gt_count": 43,
+        "pred_count": 48,
+        "precision_50": 0.8958,
+        "recall_50": 1.0,
+        "f1_50": 0.9451,
+        "ap_50": 1.0,
+        "ap_50_95": 0.6598
+      },
+      "acno": {
+        "class_name": "acno",
+        "class_id": 4,
+        "gt_count": 43,
+        "pred_count": 43,
+        "precision_50": 1.0,
+        "recall_50": 1.0,
+        "f1_50": 1.0,
+        "ap_50": 1.0,
+        "ap_50_95": 0.7819
+      },
+      "sign": {
+        "class_name": "sign",
+        "class_id": 5,
+        "gt_count": 43,
+        "pred_count": 43,
+        "precision_50": 1.0,
+        "recall_50": 1.0,
+        "f1_50": 1.0,
+        "ap_50": 1.0,
+        "ap_50_95": 0.7085
+      },
+      "name": {
+        "class_name": "name",
+        "class_id": 6,
+        "gt_count": 43,
+        "pred_count": 43,
+        "precision_50": 1.0,
+        "recall_50": 1.0,
+        "f1_50": 1.0,
+        "ap_50": 1.0,
+        "ap_50_95": 0.8747
+      }
+    }
+  },
+  "handwritten_recognition": {
+    "total_samples": 182,
+    "accuracy": 0.4286,
+    "macro_precision": 0.4931,
+    "macro_recall": 0.4177,
+    "macro_f1": 0.4146,
+    "weighted_f1": 0.4165,
+    "confusion_matrix": [
+      [
+        7,
+        0,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      [
+        2,
+        2,
+        1,
+        0,
+        7,
+        0,
+        0,
+        6,
+        4,
+        0
+      ],
+      [
+        4,
+        0,
+        14,
+        0,
+        3,
+        0,
+        0,
+        1,
+        4,
+        0
+      ],
+      [
+        1,
+        0,
+        2,
+        3,
+        1,
+        1,
+        0,
+        0,
+        3,
+        0
+      ],
+      [
+        2,
+        1,
+        1,
+        0,
+        12,
+        2,
+        0,
+        1,
+        5,
+        0
+      ],
+      [
+        2,
+        0,
+        1,
+        0,
+        0,
+        8,
+        3,
+        0,
+        1,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        3,
+        1,
+        5,
+        3,
+        2,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        1,
+        8,
+        2,
+        1
+      ],
+      [
+        2,
+        0,
+        1,
+        0,
+        2,
+        1,
+        1,
+        1,
+        14,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        0,
+        4,
+        2,
+        5
+      ]
+    ],
+    "per_class": {
+      "0": {
+        "digit": "0",
+        "class_id": 0,
+        "support": 15,
+        "true_positives": 7,
+        "false_positives": 15,
+        "false_negatives": 8,
+        "precision": 0.3182,
+        "recall": 0.4667,
+        "f1_score": 0.3784
+      },
+      "1": {
+        "digit": "1",
+        "class_id": 1,
+        "support": 22,
+        "true_positives": 2,
+        "false_positives": 2,
+        "false_negatives": 20,
+        "precision": 0.5,
+        "recall": 0.0909,
+        "f1_score": 0.1538
+      },
+      "2": {
+        "digit": "2",
+        "class_id": 2,
+        "support": 26,
+        "true_positives": 14,
+        "false_positives": 9,
+        "false_negatives": 12,
+        "precision": 0.6087,
+        "recall": 0.5385,
+        "f1_score": 0.5714
+      },
+      "3": {
+        "digit": "3",
+        "class_id": 3,
+        "support": 11,
+        "true_positives": 3,
+        "false_positives": 1,
+        "false_negatives": 8,
+        "precision": 0.75,
+        "recall": 0.2727,
+        "f1_score": 0.4
+      },
+      "4": {
+        "digit": "4",
+        "class_id": 4,
+        "support": 24,
+        "true_positives": 12,
+        "false_positives": 21,
+        "false_negatives": 12,
+        "precision": 0.3636,
+        "recall": 0.5,
+        "f1_score": 0.4211
+      },
+      "5": {
+        "digit": "5",
+        "class_id": 5,
+        "support": 15,
+        "true_positives": 8,
+        "false_positives": 7,
+        "false_negatives": 7,
+        "precision": 0.5333,
+        "recall": 0.5333,
+        "f1_score": 0.5333
+      },
+      "6": {
+        "digit": "6",
+        "class_id": 6,
+        "support": 15,
+        "true_positives": 5,
+        "false_positives": 6,
+        "false_negatives": 10,
+        "precision": 0.4545,
+        "recall": 0.3333,
+        "f1_score": 0.3846
+      },
+      "7": {
+        "digit": "7",
+        "class_id": 7,
+        "support": 16,
+        "true_positives": 8,
+        "false_positives": 17,
+        "false_negatives": 8,
+        "precision": 0.32,
+        "recall": 0.5,
+        "f1_score": 0.3902
+      },
+      "8": {
+        "digit": "8",
+        "class_id": 8,
+        "support": 23,
+        "true_positives": 14,
+        "false_positives": 24,
+        "false_negatives": 9,
+        "precision": 0.3684,
+        "recall": 0.6087,
+        "f1_score": 0.459
+      },
+      "9": {
+        "digit": "9",
+        "class_id": 9,
+        "support": 15,
+        "true_positives": 5,
+        "false_positives": 2,
+        "false_negatives": 10,
+        "precision": 0.7143,
+        "recall": 0.3333,
+        "f1_score": 0.4545
+      }
+    },
+    "confusing_pairs": [
+      {
+        "true_digit": "1",
+        "pred_digit": "4",
+        "error_count": 7
+      },
+      {
+        "true_digit": "1",
+        "pred_digit": "7",
+        "error_count": 6
+      },
+      {
+        "true_digit": "4",
+        "pred_digit": "8",
+        "error_count": 5
+      },
+      {
+        "true_digit": "1",
+        "pred_digit": "8",
+        "error_count": 4
+      },
+      {
+        "true_digit": "2",
+        "pred_digit": "0",
+        "error_count": 4
+      },
+      {
+        "true_digit": "2",
+        "pred_digit": "8",
+        "error_count": 4
+      },
+      {
+        "true_digit": "7",
+        "pred_digit": "4",
+        "error_count": 4
+      },
+      {
+        "true_digit": "9",
+        "pred_digit": "7",
+        "error_count": 4
+      },
+      {
+        "true_digit": "2",
+        "pred_digit": "4",
+        "error_count": 3
+      },
+      {
+        "true_digit": "3",
+        "pred_digit": "8",
+        "error_count": 3
+      }
+    ],
+    "low_confidence_count": 148,
+    "incorrect_count": 104
+  },
+  "ocr_performance": {
+    "word_exact_match_accuracy": 0.002,
+    "word_error_rate_wer": 0.998,
+    "character_error_rate_cer": 1.0,
+    "character_level_accuracy": 0.0
+  },
+  "field_extraction": {
+    "amount": {
+      "total_evaluated": 169,
+      "presence_rate": 0.3669,
+      "exact_match_accuracy": 0.0059,
+      "character_accuracy": 0.1333
+    },
+    "date": {
+      "total_evaluated": 169,
+      "presence_rate": 0.8935,
+      "exact_match_accuracy": 0.0,
+      "character_accuracy": 0.292
+    },
+    "name": {
+      "total_evaluated": 169,
+      "presence_rate": 0.4379,
+      "exact_match_accuracy": 0.0,
+      "character_accuracy": 0.1412
+    }
+  },
+  "system_performance": {
+    "total_processed": 212,
+    "successful_runs": 212,
+    "failed_runs": 0,
+    "failure_rate": 0.0,
+    "latency_ms": {
+      "mean_total": 692.31,
+      "median_total": 616.17,
+      "p95_total": 1302.28,
+      "preprocessing_mean": 0.56,
+      "detection_mean": 221.6,
+      "extraction_mean": 469.71
+    },
+    "memory_mb": {
+      "peak_rss_mb": 3374.31,
+      "peak_traced_heap_mb": 6.3
+    },
+    "failure_modes": {
+      "handwriting_recognition_error": 0,
+      "poor_image_quality_low_resolution": 506,
+      "field_detection_miss": 0,
+      "ocr_background_interference": 0,
+      "low_confidence_review_trigger": 375
+    }
+  },
+  "validation_and_review": {
+    "status_distribution": {
+      "INVALID": 212
+    },
+    "verification_rate": 0.0,
+    "review_required_rate": 0.0,
+    "invalid_rate": 1.0,
+    "error_state_rate": 0.0,
+    "confidence_tier_counts": {
+      "LOW": 1009,
+      "MEDIUM": 47,
+      "HIGH": 4
+    },
+    "top_review_reasons": [
+      [
+        "[ACNO] Account number is empty",
+        136
+      ],
+      [
+        "[ACNO] Composite confidence 0.00 falls below threshold 0.60",
+        136
+      ],
+      [
+        "[NAME] Payee recipient name is empty",
+        117
+      ],
+      [
+        "[NAME] Composite confidence 0.00 falls below threshold 0.60",
+        117
+      ],
+      [
+        "[AMOUNT] Amount field is empty",
+        112
+      ],
+      [
+        "[AMOUNT] Composite confidence 0.00 falls below threshold 0.60",
+        112
+      ],
+      [
+        "[IFSC] IFSC code is empty",
+        101
+      ],
+      [
+        "[IFSC] Composite confidence 0.00 falls below threshold 0.60",
+        101
+      ]
+    ]
+  }
+}

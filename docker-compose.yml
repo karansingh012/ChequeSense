@@ -1,0 +1,134 @@
+# ==============================================================================
+# ChequeSense Enterprise Banking Stack - Docker Compose Orchestration
+# ==============================================================================
+# Services:
+#   1. postgres:   Persistent PostgreSQL relational database for bank ledgers
+#   2. api:        FastAPI inference and business logic backend
+#   3. dashboard:  Streamlit corporate banking operational UI
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. PostgreSQL Relational Persistence Service
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: chequesense-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-chequesense}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-chequesense}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - chequesense-net
+
+  # ----------------------------------------------------------------------------
+  # 2. FastAPI AI Inference Backend Service
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chequesense:latest
+    container_name: chequesense-api
+    restart: unless-stopped
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-chequesense}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-chequesense}
+      - DETECTOR_MODEL_PATH=/app/models/field_detector/best_model.pt
+      - RECOGNIZER_MODEL_PATH=/app/models/recognizer/best_model.pt
+      - TESSERACT_CMD=/usr/bin/tesseract
+      - UPLOAD_DIR=/app/data/uploads
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-chequesense_super_secret_jwt_key_2026}
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440
+      - DEFAULT_ADMIN_USER=${DEFAULT_ADMIN_USER:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-AdminPassword123!}
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8000:8000"
+    volumes:
+      - cheque_uploads:/app/data/uploads
+      - ./models:/app/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - chequesense-net
+
+  # ----------------------------------------------------------------------------
+  # 3. Streamlit Banking Operations Dashboard Service
+  # ----------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chequesense:latest
+    container_name: chequesense-dashboard
+    restart: unless-stopped
+    command: ["streamlit", "run", "dashboard/app.py", "--server.port", "8501", "--server.address", "0.0.0.0", "--server.headless", "true"]
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - CHEQUESENSE_API_URL=http://api:8000/api/v1
+      - CHEQUESENSE_API_USER=${DEFAULT_ADMIN_USER:-admin}
+      - CHEQUESENSE_API_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-AdminPassword123!}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-chequesense}
+      - UPLOAD_DIR=/app/data/uploads
+      - DETECTOR_MODEL_PATH=/app/models/field_detector/best_model.pt
+      - RECOGNIZER_MODEL_PATH=/app/models/recognizer/best_model.pt
+      - TESSERACT_CMD=/usr/bin/tesseract
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8501:8501"
+    volumes:
+      - cheque_uploads:/app/data/uploads
+      - ./models:/app/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8501/_stcore/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - chequesense-net
+
+# ------------------------------------------------------------------------------
+# Persistent Storage Volumes
+# ------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  cheque_uploads:
+    driver: local
+
+# ------------------------------------------------------------------------------
+# Isolated Bridge Network
+# ------------------------------------------------------------------------------
+networks:
+  chequesense-net:
+    driver: bridge

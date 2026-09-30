@@ -16,6 +16,7 @@ from fastapi import (
     HTTPException,
     Path as FastPath,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -27,10 +28,13 @@ from api.dependencies import (
     ALLOWED_EXTENSIONS,
     ALLOWED_MIME_TYPES,
     MAX_FILE_SIZE_BYTES,
+    get_client_ip,
+    get_current_user,
     get_db,
     get_pipeline,
     get_review_queue_manager,
     get_upload_dir,
+    require_roles,
 )
 from api.schemas import (
     ChequeDetailResponse,
@@ -38,23 +42,28 @@ from api.schemas import (
     ChequeProcessResponse,
     ChequeUploadResponse,
     ErrorResponse,
+    ManualCorrectionRequest,
 )
 from src.analytics.trends import detect_amount_anomaly_signal
 from src.database.crud import (
+    correct_cheque_fields,
     create_cheque,
     get_cheque_by_hash,
     get_cheque_by_id,
     list_cheques,
     save_pipeline_execution,
 )
-from src.database.models import Cheque
+from src.database.models import Cheque, User
 from src.database.schemas import ChequeCreate
 from src.pipeline.pipeline import ChequeInferencePipeline
+from src.security.audit import AuditAction, record_audit_event
+from src.security.auth import UserRole
 from src.validation.review_queue import ReviewQueueManager
 
 logger = logging.getLogger("chequesense.api.cheque")
 
 router = APIRouter(prefix="/cheques", tags=["Cheques"])
+
 
 
 # ------------------------------------------------------------------------------
@@ -74,8 +83,10 @@ router = APIRouter(prefix="/cheques", tags=["Cheques"])
 )
 async def upload_cheque(
     file: UploadFile = File(..., description="Cheque image file (PNG, JPEG, TIFF, WEBP)"),
+    request: Request = None,
     db: Session = Depends(get_db),
     upload_dir: Path = Depends(get_upload_dir),
+    current_user: User = Depends(require_roles(UserRole.EMPLOYEE, UserRole.ADMIN)),
 ) -> ChequeUploadResponse:
     # 1. Validate File Extension
     orig_name = file.filename or "cheque.png"
@@ -120,6 +131,23 @@ async def upload_cheque(
     existing = get_cheque_by_hash(db, image_hash)
     if existing:
         logger.info("Duplicate cheque image detected via hash %s (ID: %d)", image_hash[:16], existing.id)
+        if request:
+            record_audit_event(
+                session=db,
+                action=AuditAction.UPLOAD_CHEQUE,
+                username=current_user.username,
+                user_id=current_user.id,
+                resource_type="cheque",
+                resource_id=str(existing.id),
+                details={
+                    "cheque_identifier": existing.cheque_identifier,
+                    "filename": orig_name,
+                    "file_size": file_size,
+                    "image_hash": image_hash,
+                    "duplicate": True,
+                },
+                ip_address=get_client_ip(request),
+            )
         return ChequeUploadResponse.model_validate(existing)
 
     # 6. Generate safe filename avoiding path traversal
@@ -144,6 +172,24 @@ async def upload_cheque(
     cheque = create_cheque(db, cheque_in)
     logger.info("Successfully ingested cheque '%s' (DB ID: %d)", cheque.cheque_identifier, cheque.id)
 
+    # 8. Record mandatory audit log
+    if request:
+        record_audit_event(
+            session=db,
+            action=AuditAction.UPLOAD_CHEQUE,
+            username=current_user.username,
+            user_id=current_user.id,
+            resource_type="cheque",
+            resource_id=str(cheque.id),
+            details={
+                "cheque_identifier": cheque.cheque_identifier,
+                "filename": orig_name,
+                "file_size": file_size,
+                "image_hash": image_hash,
+            },
+            ip_address=get_client_ip(request),
+        )
+
     return ChequeUploadResponse.model_validate(cheque)
 
 
@@ -163,9 +209,11 @@ async def upload_cheque(
 )
 def process_cheque(
     id: int = FastPath(..., ge=1, description="Database ID of the cheque to process"),
+    request: Request = None,
     db: Session = Depends(get_db),
     pipeline: ChequeInferencePipeline = Depends(get_pipeline),
     review_queue: ReviewQueueManager = Depends(get_review_queue_manager),
+    current_user: User = Depends(require_roles(UserRole.EMPLOYEE, UserRole.ADMIN)),
 ) -> ChequeProcessResponse:
     # 1. Fetch cheque from database
     cheque = get_cheque_by_id(db, id)
@@ -241,6 +289,41 @@ def process_cheque(
 
     latency = pipeline_result.diagnostics.processing_time_ms if pipeline_result.diagnostics else 0.0
 
+    # 8. Record audit log for processing
+    if request:
+        record_audit_event(
+            session=db,
+            action=AuditAction.PROCESS_CHEQUE,
+            username=current_user.username,
+            user_id=current_user.id,
+            resource_type="cheque",
+            resource_id=str(saved_cheque.id),
+            details={
+                "cheque_identifier": saved_cheque.cheque_identifier,
+                "status": saved_cheque.status,
+                "overall_confidence": saved_cheque.overall_confidence,
+                "review_required": saved_cheque.review_required,
+                "latency_ms": latency,
+            },
+            ip_address=get_client_ip(request),
+        )
+
+        if saved_cheque.status != "PROCESSED":
+            record_audit_event(
+                session=db,
+                action=AuditAction.STATUS_CHANGE,
+                username=current_user.username,
+                user_id=current_user.id,
+                resource_type="cheque",
+                resource_id=str(saved_cheque.id),
+                details={
+                    "old_status": "PROCESSED",
+                    "new_status": saved_cheque.status,
+                    "trigger": "pipeline_processing",
+                },
+                ip_address=get_client_ip(request),
+            )
+
     return ChequeProcessResponse(
         cheque_id=saved_cheque.id,
         cheque_identifier=saved_cheque.cheque_identifier,
@@ -272,6 +355,7 @@ def process_cheque(
 def get_cheque(
     id: int = FastPath(..., ge=1, description="Database ID of the cheque"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> ChequeDetailResponse:
     cheque = get_cheque_by_id(db, id, include_relations=True)
     if not cheque:
@@ -299,6 +383,7 @@ def list_all_cheques(
     skip: int = Query(0, ge=0, description="Offset for pagination"),
     limit: int = Query(50, ge=1, le=100, description="Page size limit"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> ChequeListResponse:
     # Query items with relations for complete view
     items = list_cheques(
@@ -320,7 +405,6 @@ def list_all_cheques(
     # Ensure relations are hydrated for response models
     validated_items = []
     for item in items:
-        # Load relations if needed
         hydrated = get_cheque_by_id(db, item.id, include_relations=True)
         if hydrated:
             validated_items.append(ChequeDetailResponse.model_validate(hydrated))
@@ -331,3 +415,83 @@ def list_all_cheques(
         limit=limit,
         items=validated_items,
     )
+
+
+# ------------------------------------------------------------------------------
+# 5. Manual Review & Correction Endpoint
+# ------------------------------------------------------------------------------
+
+@router.post(
+    "/{id}/review",
+    response_model=ChequeDetailResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Submit manual teller corrections and resolve review",
+    description="Allows REVIEWER or ADMIN to correct extracted values, resolve review queue items, and update cheque status.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Cheque ID not found"},
+    },
+)
+def review_cheque(
+    payload: ManualCorrectionRequest,
+    id: int = FastPath(..., ge=1, description="Database ID of the cheque"),
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.REVIEWER, UserRole.ADMIN)),
+) -> ChequeDetailResponse:
+    existing = get_cheque_by_id(db, id, include_relations=True)
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Cheque with ID {id} does not exist.",
+        )
+    old_status = existing.status
+
+    updated = correct_cheque_fields(
+        db=db,
+        cheque_id=id,
+        field_corrections=payload.corrections,
+        new_status=payload.status,
+        resolution_note=payload.resolution_note,
+        reviewed_by_user_id=current_user.id,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to apply manual corrections to cheque.",
+        )
+
+    # 1. Audit manual correction
+    if request:
+        record_audit_event(
+            session=db,
+            action=AuditAction.MANUAL_CORRECTION,
+            username=current_user.username,
+            user_id=current_user.id,
+            resource_type="cheque",
+            resource_id=str(id),
+            details={
+                "corrections": payload.corrections,
+                "resolution_note": payload.resolution_note,
+            },
+            ip_address=get_client_ip(request),
+        )
+
+        # 2. Audit status change if changed
+        if old_status != updated.status:
+            record_audit_event(
+                session=db,
+                action=AuditAction.STATUS_CHANGE,
+                username=current_user.username,
+                user_id=current_user.id,
+                resource_type="cheque",
+                resource_id=str(id),
+                details={
+                    "old_status": old_status,
+                    "new_status": updated.status,
+                    "trigger": "manual_review",
+                },
+                ip_address=get_client_ip(request),
+            )
+
+    return ChequeDetailResponse.model_validate(updated)
+

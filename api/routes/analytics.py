@@ -8,10 +8,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_db
+from api.dependencies import get_db, require_roles
 from api.schemas import AnalyticsTrendsResponse, ExecutiveSummary
 from src.analytics.metrics import calculate_executive_dashboard
 from src.analytics.trends import calculate_amount_trend, calculate_volume_trend
+from src.database.models import User
+from src.security.auth import UserRole
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -27,6 +29,7 @@ def get_analytics_summary(
     start_date: Optional[datetime.datetime] = Query(None, description="Start of reporting window (ISO format)"),
     end_date: Optional[datetime.datetime] = Query(None, description="End of reporting window (ISO format)"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ANALYST, UserRole.ADMIN)),
 ) -> ExecutiveSummary:
     return calculate_executive_dashboard(
         session=db,
@@ -47,6 +50,7 @@ def get_analytics_trends(
     start_date: Optional[datetime.datetime] = Query(None, description="Start timestamp (ISO format)"),
     end_date: Optional[datetime.datetime] = Query(None, description="End timestamp (ISO format)"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ANALYST, UserRole.ADMIN)),
 ) -> AnalyticsTrendsResponse:
     vol_trends = calculate_volume_trend(
         session=db,

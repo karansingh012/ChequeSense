@@ -1,0 +1,51 @@
+# ==============================================================================
+# ChequeSense Docker Build Ignore Rules
+# ==============================================================================
+
+# 1. Datasets & Raw Image Repositories (Strict Compliance: Never in image)
+Dataset/
+data/raw/
+data/processed/
+data/splits/
+data/annotations/
+data/uploads/*
+!data/uploads/.gitkeep
+
+# 2. Secrets, Keys & Environment Overrides (Strict Compliance: Never in image)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa
+*.crt
+
+# 3. Source Control & IDE Metadata
+.git/
+.gitignore
+.github/
+.claude/
+.gemini/
+.idea/
+.vscode/
+
+# 4. Python Bytecode, Caches & Test Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 5. Local Runtime Logs, Scratch & Temporary Files
+*.log
+logs/
+scratch/
+reports/figures/*.png
+
+# 6. Virtual Environments
+venv/
+.venv/
+env/
+ENV/

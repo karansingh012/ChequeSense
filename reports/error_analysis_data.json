@@ -1,0 +1,723 @@
+{
+  "extraction_errors_sample": [
+    {
+      "sample_id": "hw_test_00004",
+      "field": "amount",
+      "ground_truth": "2968",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00004",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "777",
+      "confidence": 0.6081,
+      "method": "recognizer",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00004",
+      "field": "name",
+      "ground_truth": "Jiang Li Tao",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "ocr",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00006",
+      "field": "amount",
+      "ground_truth": "9018",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00006",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00006",
+      "field": "name",
+      "ground_truth": "Eleanor Freeman",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00007",
+      "field": "amount",
+      "ground_truth": "2438",
+      "predicted": "7077",
+      "confidence": 0.406,
+      "method": "recognizer",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00007",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "426222",
+      "confidence": 0.5992,
+      "method": "recognizer",
+      "similarity": 0.25,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00007",
+      "field": "name",
+      "ground_truth": "Abdul Qais Khouri",
+      "predicted": ". ftbdul air Khouyi OA BEARER 2 OAS BH",
+      "confidence": 0.6701,
+      "method": "ocr",
+      "similarity": 0.3333,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00009",
+      "field": "amount",
+      "ground_truth": "3904",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00009",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00009",
+      "field": "name",
+      "ground_truth": "Edmee Pelletier",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00010",
+      "field": "amount",
+      "ground_truth": "7542",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00010",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "ee ut 0 106 0s : oomuMyYyry\u00a5Y\u00a5",
+      "confidence": 0.3428,
+      "method": "hybrid",
+      "similarity": 0.0952,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00010",
+      "field": "name",
+      "ground_truth": "Eleanor Freeman",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00011",
+      "field": "amount",
+      "ground_truth": "6548",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00011",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "iat ilntheteeet Ditedeniniainlbaintind DOMMY YY \u00a5",
+      "confidence": 0.2644,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00011",
+      "field": "name",
+      "ground_truth": "Jodie Holden",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "ocr",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00012",
+      "field": "amount",
+      "ground_truth": "478",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00012",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "ee ut 0 106 0s : oomuMyYyry\u00a5Y\u00a5",
+      "confidence": 0.3428,
+      "method": "hybrid",
+      "similarity": 0.0952,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00012",
+      "field": "name",
+      "ground_truth": "Seymour Patenaude",
+      "predicted": "Pay Seymour Pabenaude __ rune wt",
+      "confidence": 0.6992,
+      "method": "ocr",
+      "similarity": 0.6,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00013",
+      "field": "amount",
+      "ground_truth": "8684",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00013",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "777",
+      "confidence": 0.6082,
+      "method": "recognizer",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00013",
+      "field": "name",
+      "ground_truth": "Naomi Grant",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "ocr",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00014",
+      "field": "amount",
+      "ground_truth": " ",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "hybrid",
+      "similarity": 1.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00014",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "777",
+      "confidence": 0.6081,
+      "method": "recognizer",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00014",
+      "field": "name",
+      "ground_truth": "Wafiyah Nashwa Wasem",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "ocr",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00017",
+      "field": "amount",
+      "ground_truth": "8486",
+      "predicted": "1096",
+      "confidence": 0.6786,
+      "method": "hybrid",
+      "similarity": 0.25,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00017",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "06/05/2022",
+      "confidence": 0.6007,
+      "method": "hybrid",
+      "similarity": 0.8,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00017",
+      "field": "name",
+      "ground_truth": "Ethel M. Bryson",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00019",
+      "field": "amount",
+      "ground_truth": "3007",
+      "predicted": "075677",
+      "confidence": 0.5082,
+      "method": "recognizer",
+      "similarity": 0.1667,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00019",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "06/05/2022",
+      "confidence": 0.6714,
+      "method": "hybrid",
+      "similarity": 0.8,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00019",
+      "field": "name",
+      "ground_truth": "Jiang Li Tao",
+      "predicted": "Jiang Li Tao a CA SEARER 2 ORG BH",
+      "confidence": 0.673,
+      "method": "ocr",
+      "similarity": 0.4,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00021",
+      "field": "amount",
+      "ground_truth": "453",
+      "predicted": "457657",
+      "confidence": 0.3519,
+      "method": "recognizer",
+      "similarity": 0.3333,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00021",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "06/05/2022",
+      "confidence": 0.6007,
+      "method": "hybrid",
+      "similarity": 0.8,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00021",
+      "field": "name",
+      "ground_truth": "Elliot Humphreys",
+      "predicted": "j AE SO ry CA BEARER Zl ONS BH",
+      "confidence": 0.5962,
+      "method": "ocr",
+      "similarity": 0.1818,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00022",
+      "field": "amount",
+      "ground_truth": "4189",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00022",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00022",
+      "field": "name",
+      "ground_truth": "Chapin Auger",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00023",
+      "field": "amount",
+      "ground_truth": "3490",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00023",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "777",
+      "confidence": 0.6081,
+      "method": "recognizer",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00023",
+      "field": "name",
+      "ground_truth": "Katie Connor",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "ocr",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00027",
+      "field": "amount",
+      "ground_truth": "4738",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00027",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "06105222",
+      "confidence": 0.5102,
+      "method": "recognizer",
+      "similarity": 0.75,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00027",
+      "field": "name",
+      "ground_truth": "Ethel M. Bryson",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00030",
+      "field": "amount",
+      "ground_truth": "9871",
+      "predicted": "757917",
+      "confidence": 0.4682,
+      "method": "recognizer",
+      "similarity": 0.3333,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00030",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "06/05/2022",
+      "confidence": 0.6713,
+      "method": "hybrid",
+      "similarity": 0.8,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00030",
+      "field": "name",
+      "ground_truth": "Brady Jamin",
+      "predicted": "j py___ Bory domi AE one a",
+      "confidence": 0.5565,
+      "method": "ocr",
+      "similarity": 0.2941,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00031",
+      "field": "amount",
+      "ground_truth": "349",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00031",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "iat ilntheteeet Ditedeniniainlbaintind DOMMY YY \u00a5",
+      "confidence": 0.2643,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00031",
+      "field": "name",
+      "ground_truth": "Petra Kovacic",
+      "predicted": "Pay Petra Kovacie ee mw ue wi",
+      "confidence": 0.7053,
+      "method": "ocr",
+      "similarity": 0.4783,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00032",
+      "field": "amount",
+      "ground_truth": " ",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 1.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00032",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00032",
+      "field": "name",
+      "ground_truth": "Petra Kovacic",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00033",
+      "field": "amount",
+      "ground_truth": "9635",
+      "predicted": "757615",
+      "confidence": 0.4797,
+      "method": "recognizer",
+      "similarity": 0.3333,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00033",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "06/05/2022",
+      "confidence": 0.6713,
+      "method": "hybrid",
+      "similarity": 0.8,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00033",
+      "field": "name",
+      "ground_truth": "Katie Connor",
+      "predicted": "vw adieonnoy OA SEARER 7 ONS Bt",
+      "confidence": 0.6527,
+      "method": "ocr",
+      "similarity": 0.28,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00034",
+      "field": "amount",
+      "ground_truth": "1645",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "hybrid",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00034",
+      "field": "date",
+      "ground_truth": "06/05/22",
+      "predicted": "ee ut 0 106 0s : oomuMyYyry\u00a5Y\u00a5",
+      "confidence": 0.3427,
+      "method": "hybrid",
+      "similarity": 0.0952,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    },
+    {
+      "sample_id": "hw_test_00034",
+      "field": "name",
+      "ground_truth": "Abdul Qais Khouri",
+      "predicted": "",
+      "confidence": 0.0,
+      "method": "none",
+      "similarity": 0.0,
+      "resolution": "512x256",
+      "failure_category": "poor_image_quality_low_resolution"
+    }
+  ],
+  "failure_mode_counts": {
+    "handwriting_recognition_error": 0,
+    "poor_image_quality_low_resolution": 506,
+    "field_detection_miss": 0,
+    "ocr_background_interference": 0,
+    "low_confidence_review_trigger": 375
+  },
+  "confusing_digit_pairs": [
+    {
+      "true_digit": "1",
+      "pred_digit": "4",
+      "error_count": 7
+    },
+    {
+      "true_digit": "1",
+      "pred_digit": "7",
+      "error_count": 6
+    },
+    {
+      "true_digit": "4",
+      "pred_digit": "8",
+      "error_count": 5
+    },
+    {
+      "true_digit": "1",
+      "pred_digit": "8",
+      "error_count": 4
+    },
+    {
+      "true_digit": "2",
+      "pred_digit": "0",
+      "error_count": 4
+    },
+    {
+      "true_digit": "2",
+      "pred_digit": "8",
+      "error_count": 4
+    },
+    {
+      "true_digit": "7",
+      "pred_digit": "4",
+      "error_count": 4
+    },
+    {
+      "true_digit": "9",
+      "pred_digit": "7",
+      "error_count": 4
+    },
+    {
+      "true_digit": "2",
+      "pred_digit": "4",
+      "error_count": 3
+    },
+    {
+      "true_digit": "3",
+      "pred_digit": "8",
+      "error_count": 3
+    }
+  ]
+}

@@ -271,3 +271,36 @@ class ValidationResult(Base):
 
     def __repr__(self) -> str:
         return f"<ValidationResult(id={self.id}, check='{self.check_type}', status='{self.validation_status}')>"
+
+
+class AuditLog(Base):
+    """Immutable audit trail for compliance, security events, and operator actions."""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    username: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True
+    )  # LOGIN, UPLOAD_CHEQUE, PROCESS_CHEQUE, MANUAL_CORRECTION, STATUS_CHANGE
+    resource_type: Mapped[str] = mapped_column(String(64), nullable=False)  # user, cheque, validation_result, auth
+    resource_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    details_json: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONType, nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+
+    # Relationships
+    user: Mapped[Optional[User]] = relationship("User")
+
+    __table_args__ = (
+        Index("idx_audit_logs_action_timestamp", "action", "timestamp"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AuditLog(id={self.id}, action='{self.action}', user='{self.username}', time='{self.timestamp}')>"
+

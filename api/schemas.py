@@ -162,3 +162,81 @@ class AnalyticsTrendsResponse(BaseModel):
     amount_trends: List[AmountTrendPoint] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ------------------------------------------------------------------------------
+# Authentication & RBAC Schemas
+# ------------------------------------------------------------------------------
+
+class UserRegisterRequest(BaseModel):
+    """Payload for registering a new user."""
+
+    username: str = Field(..., min_length=3, max_length=50, description="Unique username")
+    email: str = Field(..., min_length=5, max_length=120, description="Corporate email address")
+    password: str = Field(..., min_length=8, description="Secure password (min 8 chars)")
+    role: str = Field(default="EMPLOYEE", description="Role: ADMIN, EMPLOYEE, ANALYST, REVIEWER")
+
+
+class UserLoginRequest(BaseModel):
+    """Payload for user login authentication."""
+
+    username: str = Field(..., description="Registered username")
+    password: str = Field(..., description="Account password")
+
+
+class TokenResponse(BaseModel):
+    """JWT Bearer authentication token response."""
+
+    access_token: str = Field(description="Signed JWT access token")
+    token_type: str = Field(default="bearer", description="Token authentication type")
+    expires_in: int = Field(description="Token lifetime in seconds")
+    role: str = Field(description="Assigned banking role")
+    username: str = Field(description="Authenticated username")
+
+
+class UserProfileResponse(BaseModel):
+    """Authenticated user profile with active permissions."""
+
+    id: int = Field(description="Database user ID")
+    username: str = Field(description="Username")
+    email: str = Field(description="Corporate email")
+    role: str = Field(description="Banking operational role")
+    is_active: bool = Field(description="Account active status")
+    permissions: List[str] = Field(default_factory=list, description="List of granted permission names")
+    created_at: datetime.datetime = Field(description="Account creation timestamp")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ManualCorrectionRequest(BaseModel):
+    """Payload submitted by REVIEWER or ADMIN to correct extracted cheque values."""
+
+    corrections: Dict[str, str] = Field(
+        ...,
+        description="Dictionary mapping field names to corrected values, e.g. {'amount': '15000.00'}"
+    )
+    status: Optional[str] = Field(
+        default="VERIFIED",
+        description="Updated cheque status (VERIFIED, REVIEW_REQUIRED, INVALID)"
+    )
+    resolution_note: Optional[str] = Field(
+        default=None,
+        description="Reason or notes regarding teller correction"
+    )
+
+
+class AuditLogResponse(BaseModel):
+    """Immutable audit trail log record."""
+
+    id: int
+    timestamp: datetime.datetime
+    user_id: Optional[int] = None
+    username: str
+    action: str
+    resource_type: str
+    resource_id: Optional[str] = None
+    details_json: Optional[Dict[str, Any]] = None
+    ip_address: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+

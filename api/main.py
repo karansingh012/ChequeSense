@@ -10,10 +10,13 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import os
 from api.dependencies import get_upload_dir
-from api.routes import analytics_router, cheque_router, health_router
+from api.routes import analytics_router, auth_router, cheque_router, health_router
 from api.schemas import ErrorResponse
-from src.database.connection import check_db_connection
+from src.database.connection import check_db_connection, db_session_scope, init_db
+from src.database.crud import create_user, get_user_by_username
+from src.database.schemas import UserCreate
 
 # Configure logging
 logging.basicConfig(
@@ -30,10 +33,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     upload_dir = get_upload_dir()
     logger.info("Cheque image upload storage initialized at: %s", upload_dir.resolve())
 
-    # Check database liveness
+    # Check database liveness and initialize schema
     db_ok = check_db_connection()
     if db_ok:
         logger.info("PostgreSQL database connection verified successfully.")
+        try:
+            init_db()
+            admin_user = os.getenv("DEFAULT_ADMIN_USER", "admin")
+            admin_pass = os.getenv("DEFAULT_ADMIN_PASSWORD", "AdminPassword123!")
+            with db_session_scope() as session:
+                existing = get_user_by_username(session, admin_user)
+                if not existing:
+                    create_user(
+                        session,
+                        UserCreate(
+                            username=admin_user,
+                            email=os.getenv("DEFAULT_ADMIN_EMAIL", "admin@chequesense.bank"),
+                            role="ADMIN",
+                            password=admin_pass,
+                            is_active=True,
+                        ),
+                        use_bcrypt=True,
+                    )
+                    logger.info("Created default system administrator user '%s'.", admin_user)
+        except Exception as e:
+            logger.warning("Database schema or admin user initialization warning: %s", e)
     else:
         logger.warning("PostgreSQL database is currently unreachable. Requests requiring DB may fail.")
 
@@ -88,9 +112,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 
 # Register API Routers
+app.include_router(auth_router)  # Mounted at /auth/register, /auth/login, /auth/me
+app.include_router(auth_router, prefix="/api/v1")  # Mounted at /api/v1/auth/...
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(cheque_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
+
 
 
 @app.get("/", include_in_schema=False)
